@@ -1,0 +1,79 @@
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: bus_db
+    env_file: .env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "${POSTGRES_PORT}:${POSTGRES_PORT}"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # run init SQL on first boot (optional but handy)
+      - ./database/migrations/001_init.sql:/docker-entrypoint-initdb.d/001_init.sql:ro
+      - ./database/migrations/002_indexes.sql:/docker-entrypoint-initdb.d/002_indexes.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend_api:
+    build:
+      context: ./backend
+    container_name: bus_api
+    env_file: .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${BACKEND_PORT}:8000"
+    command: ["python", "-m", "app.main"]
+
+  backend_worker:
+    build:
+      context: ./backend
+    container_name: bus_worker
+    env_file: .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      FIWARE_URL: ${FIWARE_URL}
+      POLL_SECONDS: ${POLL_SECONDS}
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["python", "-m", "worker.ingest"]
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: bus_frontend
+    env_file: .env
+    depends_on:
+      - backend_api
+    ports:
+      - "${FRONTEND_PORT}:5173"
+    environment:
+      # Vite reads variables prefixed with VITE_
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5173"]
+
+  pgadmin:
+    image: dpage/pgadmin4:8
+    container_name: bus_pgadmin
+    env_file: .env
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
+    ports:
+      - "${PGADMIN_PORT}:80"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
