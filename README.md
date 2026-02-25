@@ -6,7 +6,7 @@ A Dockerized application that fetches real-time bus positions from the Porto Dig
 
 ## Screenshot or Demo
 
-> `![Map Screenshot](docs/map-example.png)`
+![Map Screenshot](docs/map-example.png)
 
 ---
 
