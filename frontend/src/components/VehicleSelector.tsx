@@ -1,28 +1,97 @@
-import React from "react";
+import React, { useState, useMemo } from "react";
+import { getRouteColors } from "./Map";
+import { AllRoutes } from "../api/client";
 
 type Props = {
   route: string;
   onRouteChange: (route: string) => void;
+  allRoutes: AllRoutes[];
 
   direction: number | null; // null = all
   onDirectionChange: (direction: number | null) => void;
 
   onRefreshNow: () => void;
   lastUpdated?: string;
+  mostRecentLocation?: string;  //
 };
 
 export function VehicleSelector({
   route,
   onRouteChange,
+  allRoutes,
   direction,
   onDirectionChange,
   onRefreshNow,
-  lastUpdated
+  lastUpdated,
+  mostRecentLocation
 }: Props) {
+  const [searchTerm, setSearchTerm] = useState("");
+  const [isListOpen, setIsListOpen] = useState(false);
+
+  // Filter routes based on what the user is typing
+  const filteredRoutes = useMemo(() => {
+    if (!searchTerm) return allRoutes;
+    return allRoutes.filter(r => 
+      r.route_id.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      r.route_short_name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [searchTerm, allRoutes]);
+
   return (
     <div style={styles.bar}>
       <div style={styles.left}>
-        <label style={styles.label}>
+        <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+          <span style={{ fontSize: 14 }}>Route:&nbsp;</span>
+          <input
+            value={isListOpen ? searchTerm : route}
+            onFocus={() => {
+              setIsListOpen(true);
+              setSearchTerm(""); // Clear search when focusing to show full list
+            }}
+            onBlur={() => setTimeout(() => setIsListOpen(false), 200)} // Delay so click registers
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Search..."
+            style={{ ...styles.input, width: 120 }} 
+          />
+
+          {isListOpen && (
+            <div style={styles.dropdown}>
+              <div 
+                onMouseDown={() => {
+                  onRouteChange(""); // Set route to empty string for "All"
+                  setIsListOpen(false);
+                  setSearchTerm("");
+                }}
+                style={{ ...styles.dropdownItem, fontWeight: 'regular', color: '#555' }}
+              >(All routes)
+              </div>
+              {filteredRoutes.map((r) => {
+                const { bgColor, textColor } = getRouteColors(r.route_id, 0);
+                return (
+                  <div 
+                    key={r.route_id}
+                    onMouseDown={() => { // Use onMouseDown to trigger before onBlur
+                      onRouteChange(r.route_id);
+                      setIsListOpen(false);
+                      setSearchTerm("");
+                    }}
+                    style={styles.dropdownItem}
+                  >
+                    <span style={{ 
+                      backgroundColor: bgColor, color: textColor, 
+                      padding: "2px 6px", borderRadius: 4, minWidth: 20,
+                      display: "inline-block", textAlign: "center"
+                    }}>
+                      <b>{r.route_short_name}</b>
+                    </span>
+                    &nbsp; {r.route_long_name}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        {/* <label style={styles.label}>
           Route:&nbsp;
           <input
             value={route}
@@ -30,8 +99,7 @@ export function VehicleSelector({
             placeholder="e.g. 704"
             style={styles.input}
           />
-        </label>
-
+        </label> */}
         <label style={styles.label}>
           Direction:&nbsp;
           <select
@@ -54,7 +122,12 @@ export function VehicleSelector({
       </div>
 
       <div style={styles.right}>
-        {lastUpdated ? <span style={styles.muted}>Last update: {lastUpdated}</span> : null}
+        {mostRecentLocation && (
+          <span style={{ ...styles.muted, marginRight: 15 }}>Most recent location: <b>{mostRecentLocation}</b></span>
+        )}
+        {lastUpdated ? (
+          <span style={styles.muted}>Last map update: {lastUpdated}</span>
+        ) : null}
       </div>
     </div>
   );
@@ -85,5 +158,29 @@ const styles: Record<string, React.CSSProperties> = {
     background: "#f7f7f7",
     cursor: "pointer"
   },
-  muted: { color: "#666", fontSize: 12 }
+  muted: { color: "#666", fontSize: 12 },
+
+  dropdown: {
+    position: "absolute",
+    top: "100%",
+    left: 45, // Adjusted to align with the start of the input
+    width: 300,
+    maxHeight: 300,
+    overflowY: "auto",
+    backgroundColor: "white",
+    border: "1px solid #ccc",
+    borderRadius: 4,
+    boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+    zIndex: 2000,
+    marginTop: 4
+  },
+  dropdownItem: {
+    padding: "8px 12px",
+    cursor: "pointer",
+    fontSize: 13,
+    borderBottom: "1px solid #f0f0f0",
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis"
+  }
 };

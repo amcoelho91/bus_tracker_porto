@@ -1,13 +1,38 @@
-import React from "react";
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  
+  /* Force the browser to treat this as a single, unscrollable app window */
+  overflow: hidden; 
+  position: fixed; 
+  left: 0;
+  top: 0;
+}
 
-export function StatsPage() {
-  return (
-    <div style={{ padding: 16 }}>
-      <h2>Stats (coming soon)</h2>
-      <p>
-        This page will show travel time distributions by route × day-of-week × hour-of-day,
-        using data computed from historical observations.
-      </p>
-    </div>
-  );
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  overflow: hidden;
+}
+
+.leaflet-popup-content-wrapper, 
+.leaflet-popup-content,
+.leaflet-tooltip,
+.leaflet-marker-icon.custom-bus-marker,
+.custom-bus-marker {
+  font-family: 'Inter', sans-serif !important;
+}
+
+/* Ensure Form Elements (Selects/Inputs) match */
+button, select, input, textarea {
+  font-family: 'Inter', sans-serif !important;
+}
+
+* {
+  box-sizing: border-box;
 }

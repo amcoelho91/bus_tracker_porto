@@ -38,6 +38,9 @@ def get_latest_by_route_and_direction(route_id: str | None, direction: int | Non
     filters = []
     params: dict = {}
 
+    # pedropt10: Only show buses that reported in the last 20 minutes
+    filters.append("l.observed_at > NOW() - INTERVAL '20 minutes'")
+
     if route_id:
         filters.append("l.route_id = %(route_id)s")
         params["route_id"] = route_id

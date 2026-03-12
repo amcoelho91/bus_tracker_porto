@@ -2,7 +2,9 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
+from app.api.routes import router as routes_router
 from app.api.health import router as health_router
+from app.api.shapes import router as shapes_router
 from app.api.vehicles import router as vehicles_router
 
 app = FastAPI(title="Bus Tracker API", version="0.1.0")
@@ -25,7 +27,9 @@ async def no_cache_api(request: Request, call_next):
         response.headers["Expires"] = "0"
     return response
 
+app.include_router(routes_router, prefix="/api", tags=["Routes"])
 app.include_router(health_router, prefix="/api")
+app.include_router(shapes_router, prefix="/api")
 app.include_router(vehicles_router, prefix="/api")
 
 if __name__ == "__main__":
