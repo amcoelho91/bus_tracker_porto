@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { fetchLatest, fetchRouteShape, fetchAllRoutes, type VehicleLatest, type RouteShape, type AllRoutes } from "../api/client";
+import { fetchLatest, fetchRouteShape, fetchAllRoutes, fetchStops,
+   type VehicleLatest, type RouteShape, type AllRoutes, type Stop } from "../api/client";
 import { Map, getRouteColors } from "../components/Map";
 import { VehicleSelector } from "../components/VehicleSelector";
 
@@ -14,6 +15,9 @@ export function MapPage() {
   const [allRoutes, setAllRoutes] = useState<AllRoutes[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [isListOpen, setIsListOpen] = useState(false);
+  const [stops, setStops] = useState<Stop[]>([]);
+  const [selectedRoute, setSelectedRoute] = useState<string>("");
+  const [selectedDirection, setSelectedDirection] = useState<number | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -69,6 +73,25 @@ export function MapPage() {
     }
     loadRoutes();
   }, []);
+
+  useEffect(() => {
+    async function loadStops() {
+      // Check if 'route' has a value. 
+      // We'll be more flexible with 'direction' in case it's 0.
+      if (route) {
+        console.log(`🔍 Fetching stops for Route: ${route}, Direction: ${direction}`);
+        try {
+          const data = await fetchStops(route, direction);
+          setStops(data);
+        } catch (err) {
+          console.error("Failed to load stops:", err);
+        }
+      } else {
+        setStops([]);
+      }
+    }
+    loadStops();
+  }, [route, direction]);
 
   const header = useMemo(() => {
     const n = vehicles.length;
@@ -166,7 +189,7 @@ export function MapPage() {
         )}
       </div> */}
       <div style={{ flex: 1, position: "relative" }}>
-        <Map vehicles={vehicles} shapeData0={shapeData0} shapeData1={shapeData1} selectedRoute={route} selectedDirection={direction} />
+        <Map vehicles={vehicles} shapeData0={shapeData0} shapeData1={shapeData1} stops={stops} selectedRoute={route} selectedDirection={direction} />
       </div>
     </div>
   );

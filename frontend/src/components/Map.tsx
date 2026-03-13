@@ -1,8 +1,8 @@
 import "leaflet/dist/leaflet.css";
-import React, { useMemo } from "react";
+import React, { useMemo, useEffect, useState } from "react";
 import L from 'leaflet'; // pedropt10 - Import Leaflet for custom icons
 import { MapContainer, TileLayer, Popup, Polyline, CircleMarker, Marker, Pane } from "react-leaflet";
-import type { VehicleLatest, RouteShape } from "../api/client";
+import type { VehicleLatest, RouteShape, Stop } from "../api/client";
 
 type Props = {
   vehicles: VehicleLatest[];
@@ -10,6 +10,7 @@ type Props = {
   shapeData1?: RouteShape | null; // optional second shape for "All" direction
   selectedRoute: string;
   selectedDirection: number | null;
+  stops: Stop[]; 
 };
 
 // pedropt10
@@ -51,7 +52,7 @@ export const getRouteColors = (routeId: string | null, direction: number | strin
 };
 
 // pedropt10 - added shapeData0 prop to receive route shapes from MapPage
-export function Map({ vehicles, shapeData0, shapeData1, selectedRoute, selectedDirection }: Props) {
+export function Map({ vehicles, shapeData0, shapeData1, selectedRoute, selectedDirection, stops }: Props) {
   // Colors for primary shape (Direction 0 or currently selected)
   const primaryColors = useMemo(() => 
     getRouteColors(selectedRoute, selectedDirection === null ? 0 : selectedDirection), 
@@ -76,12 +77,67 @@ export function Map({ vehicles, shapeData0, shapeData1, selectedRoute, selectedD
     return [avgLat, avgLon];
   }, [vehicles, shapeData0]);
 
+  const mapRef = React.useRef<L.Map | null>(null);
+
+  useEffect(() => {
+    // We only want to add the control once the map is initialized
+    if (!mapRef.current) return;
+    const map = mapRef.current;
+
+    const LocateControl = L.Control.extend({
+      onAdd: function() {
+        // Create a standard Leaflet button container
+        const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
+        const button = L.DomUtil.create('a', '', container);
+        
+        button.innerHTML = '📍';
+        button.title = "My Location";
+        button.href = "#";
+        button.style.fontSize = '24px';
+        button.style.width = '44px';   
+        button.style.height = '44px';
+        button.style.display = 'flex';
+        button.style.alignItems = 'center';
+        button.style.justifyContent = 'center';
+        button.style.backgroundColor = 'white';
+        button.style.color = 'black';
+        button.style.fontWeight = 'bold';
+
+        button.onclick = function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          // Leaflet's built-in locate method
+          map.locate({ setView: false, enableHighAccuracy: true});
+        };
+
+        return container;
+      }
+    });
+
+    const control = new LocateControl({ position: 'topright' });
+    control.addTo(map);
+
+    // Marker to indicate where the user is found
+    map.on('locationfound', (e) => {
+      map.flyTo(e.latlng, 16, { animate: true, duration: 1.5 });
+      L.circleMarker(e.latlng, { radius: 8, fillColor: '#268FFF', fillOpacity: 0.9,
+         color: '#FFFFFF', weight: 3, opacity: 1 }).addTo(map);
+    });
+
+    map.on('locationerror', () => alert("Location access denied."));
+
+    return () => {
+      control.remove();
+    };
+  }, [mapRef]);
+
   return (
-    <MapContainer center={center} zoom={13} style={{ height: "100%", width: "100%" }}>
+    <MapContainer ref={mapRef} center={center} zoom={13} style={{ height: "100%", width: "100%" }}>
       <TileLayer
         attribution='&copy; OpenStreetMap contributors'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
+      
       {/* Secondary Shape - Z-index 390 keeps it below Primary */}
       <Pane name="secondary-pane" style={{ zIndex: 390 }}>
         {shapeData1 && shapeData1.coordinates && shapeData1.coordinates.length > 0 && (
@@ -115,7 +171,52 @@ export function Map({ vehicles, shapeData0, shapeData1, selectedRoute, selectedD
           </>
         )}
       </Pane>
-            
+
+      {/* Render the Stops */}
+      <Pane name="stops-pane" style={{ zIndex: 600 }}>
+        {stops.map((stop: Stop) => (
+          <CircleMarker
+            key={stop.stop_id}
+            center={[stop.lat, stop.lon]}
+            radius={5}
+            pathOptions={{
+              color: "#333",
+              fillColor: "#fff",
+              fillOpacity: 1,
+              weight: 2
+            }}
+          >
+            <Popup>
+              <div style={{ fontSize: "14px" }}>
+                <div style={{ marginBottom: "5px" }}>
+                  <strong>{stop.stop_name}</strong>
+                </div>
+                <div style={{ color: "#666", fontSize: "12px", marginBottom: "8px" }}>
+                  ID: {stop.stop_id}
+                </div>
+                {stop.stop_url && (
+                  <a 
+                    href={stop.stop_url} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    style={{ 
+                      color: "#187EC2", 
+                      textDecoration: "none", 
+                      fontWeight: "bold",
+                      display: "block",
+                      borderTop: "1px solid #eee",
+                      paddingTop: "5px"
+                    }}
+                  >
+                    View Timetables →
+                  </a>
+                )}
+              </div>
+            </Popup>
+          </CircleMarker>
+      ))}</Pane>
+
+      {/* Render the Vehicles' markers with route info*/}
       {vehicles.map((v) => {
         const label = v.fleet_vehicle_id ?? v.vehicle_id;
         const hasPrev =

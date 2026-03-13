@@ -34,7 +34,10 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 16,
     padding: "10px 12px",
     borderBottom: "1px solid #eee",
-    background: "white"
+    background: "white",
+    position: "sticky",
+    top: 0,
+    zIndex: 1100
   },
   brand: { fontWeight: 700 },
   links: { display: "flex", gap: 10 },

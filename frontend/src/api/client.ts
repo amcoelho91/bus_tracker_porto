@@ -16,6 +16,15 @@ export type VehicleLatest = {
   prev_lat: number | null;
 };
 
+export type Stop = {
+  stop_id: string;
+  stop_name: string;
+  lat: number;
+  lon: number;
+  zone_id: string;
+  stop_url: string;
+};
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
 export async function fetchLatest(routeId?: string, direction?: number | null): Promise<VehicleLatest[]> {
@@ -71,6 +80,23 @@ export async function fetchAllRoutes(): Promise<any[]> {
     return await res.json();
   } catch (err) {
     console.error("Error fetching all routes:", err);
+    return [];
+  }
+}
+
+export async function fetchStops(routeId: string, directionId: number | null): Promise<Stop[]> {
+  if (!routeId || directionId === null) return [];
+
+  const url = new URL(`${API_BASE}/api/stops`);
+  url.searchParams.set("route_id", routeId.trim());
+  url.searchParams.set("direction_id", String(directionId));
+
+  try {
+    const res = await fetch(url.toString(), { cache: "no-store" });
+    if (!res.ok) throw new Error(`Failed to fetch stops: ${res.status}`);
+    return res.json();
+  } catch (err) {
+    console.error("Error fetching stops:", err);
     return [];
   }
 }

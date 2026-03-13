@@ -12,8 +12,8 @@ async def get_route_shape(
 ):
     query = """
         SELECT ST_AsGeoJSON(s.geom), r.route_color 
-        FROM bus.gtfs_shapes s
-        LEFT JOIN bus.gtfs_routes r ON s.route_id = r.route_id
+        FROM gtfs.shapes s
+        LEFT JOIN gtfs.routes r ON s.route_id = r.route_id
         WHERE s.route_id = %s AND s.direction_id = %s
         LIMIT 1;
     """

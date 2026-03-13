@@ -9,7 +9,7 @@ async def get_all_routes():
     """Fetches all available routes for the selection list."""
     query = """
         SELECT route_id, route_short_name, route_long_name 
-        FROM bus.gtfs_routes 
+        FROM gtfs.routes 
         ORDER BY 
             CASE 
                 WHEN route_id ~ '^[0-9]+$' THEN route_id::integer 
