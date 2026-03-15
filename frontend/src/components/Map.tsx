@@ -173,15 +173,15 @@ export function Map({ vehicles, shapeData0, shapeData1, selectedRoute, selectedD
       </Pane>
 
       {/* Render the Stops */}
-      <Pane name="stops-pane" style={{ zIndex: 600 }}>
+      <Pane name="stops-pane" style={{ zIndex: 500 }}>
         {stops.map((stop: Stop) => (
           <CircleMarker
             key={stop.stop_id}
             center={[stop.lat, stop.lon]}
             radius={5}
             pathOptions={{
-              color: "#333",
-              fillColor: "#fff",
+              color: primaryColors.bgColor,
+              fillColor: primaryColors.textColor,
               fillOpacity: 1,
               weight: 2
             }}
@@ -216,176 +216,178 @@ export function Map({ vehicles, shapeData0, shapeData1, selectedRoute, selectedD
           </CircleMarker>
       ))}</Pane>
 
-      {/* Render the Vehicles' markers with route info*/}
-      {vehicles.map((v) => {
-        const label = v.fleet_vehicle_id ?? v.vehicle_id;
-        const hasPrev =
-          v.prev_lat !== null &&
-          v.prev_lon !== null &&
-          (v.prev_lat !== v.lat || v.prev_lon !== v.lon);
+      <Pane name="vehicle-location-pane" style={{ zIndex: 600 }}>
+        {/* Render the Vehicles' markers with route info*/}
+        {vehicles.map((v) => {
+          const label = v.fleet_vehicle_id ?? v.vehicle_id;
+          const hasPrev =
+            v.prev_lat !== null &&
+            v.prev_lon !== null &&
+            (v.prev_lat !== v.lat || v.prev_lon !== v.lon);
 
-        const prevPos: [number, number] | null = hasPrev ? [v.prev_lat as number, v.prev_lon as number] : null;
-        const curPos: [number, number] = [v.lat, v.lon];
+          const prevPos: [number, number] | null = hasPrev ? [v.prev_lat as number, v.prev_lon as number] : null;
+          const curPos: [number, number] = [v.lat, v.lon];
 
-        // pedropt10 - Determine if the observation is older than 2 minutes
-        // useMemo ensures this calculation only runs when observed_at changes, improving performance
-        const obsTime = new Date(v.observed_at).getTime();
-        const now = Date.now();
-        const isOld = (now - obsTime) > (2 * 60 * 1000); // 2 minutes
+          // pedropt10 - Determine if the observation is older than 2 minutes
+          // useMemo ensures this calculation only runs when observed_at changes, improving performance
+          const obsTime = new Date(v.observed_at).getTime();
+          const now = Date.now();
+          const isOld = (now - obsTime) > (2 * 60 * 1000); // 2 minutes
 
-        // pedropt10 - Get colors based on route and direction
-        const { bgColor: routeBg, textColor: routeText, hasShadow } = getRouteColors(v.route_id, v.direction);
+          // pedropt10 - Get colors based on route and direction
+          const { bgColor: routeBg, textColor: routeText, hasShadow } = getRouteColors(v.route_id, v.direction);
 
-        // Override colors if observation is older than 2 minutes, otherwise use route colors
-        const bgColor = isOld ? '#a3a3a3' : routeBg;
-        const textColor = isOld ? '#FFFFFF' : routeText;
+          // Override colors if observation is older than 2 minutes, otherwise use route colors
+          const bgColor = isOld ? '#a3a3a3' : routeBg;
+          const textColor = isOld ? '#FFFFFF' : routeText;
 
-        const heading = v.heading ?? 0;
-        let BusMarkerRotation = 0;
-        let flexDir: "column" | "row" | "column-reverse" | "row-reverse" = "column";
-        let arrowRotation = 0;
-        let marginStyle = "0px"; // Default margin for arrow
+          const heading = v.heading ?? 0;
+          let BusMarkerRotation = 0;
+          let flexDir: "column" | "row" | "column-reverse" | "row-reverse" = "column";
+          let arrowRotation = 0;
+          let marginStyle = "0px"; // Default margin for arrow
 
-        // Quadrant logic:
-        if (heading >= 315 || heading < 45) { // North (NW to NE)
-          BusMarkerRotation = heading;
-          flexDir = "column";         // Arrow on TOP
-          arrowRotation = 0;
-        } else if (heading >= 45 && heading < 135) { // East (NE to SE)
-          BusMarkerRotation = heading - 90;
-          flexDir = "row-reverse";    // Arrow on RIGHT
-          arrowRotation = 90;
-          marginStyle = "0 0 0 -1px"; // Pulls it 3px closer from the Right
-        } else if (heading >= 135 && heading < 225) { // South (SE to SW)
-          BusMarkerRotation = heading - 180;
-          flexDir = "column-reverse"; // Arrow on BOTTOM
-          arrowRotation = 180;
-        } else { // West (SW to NW)
-          BusMarkerRotation = heading - 270;
-          flexDir = "row";            // Arrow on LEFT
-          arrowRotation = 270;
-          marginStyle = "0 -1px 0 0"; // Pulls it 3px closer from the Left
-        }
+          // Quadrant logic:
+          if (heading >= 315 || heading < 45) { // North (NW to NE)
+            BusMarkerRotation = heading;
+            flexDir = "column";         // Arrow on TOP
+            arrowRotation = 0;
+          } else if (heading >= 45 && heading < 135) { // East (NE to SE)
+            BusMarkerRotation = heading - 90;
+            flexDir = "row-reverse";    // Arrow on RIGHT
+            arrowRotation = 90;
+            marginStyle = "0 0 0 -1px"; // Pulls it 3px closer from the Right
+          } else if (heading >= 135 && heading < 225) { // South (SE to SW)
+            BusMarkerRotation = heading - 180;
+            flexDir = "column-reverse"; // Arrow on BOTTOM
+            arrowRotation = 180;
+          } else { // West (SW to NW)
+            BusMarkerRotation = heading - 270;
+            flexDir = "row";            // Arrow on LEFT
+            arrowRotation = 270;
+            marginStyle = "0 -1px 0 0"; // Pulls it 3px closer from the Left
+          }
 
-        // pedropt10 - Create a custom divIcon for the bus marker
-        // external div: element rotation
-        // 1st internal div: triangle pointer (arrow-like)
-        // 2nd internal div: label with route_id
-        // filter: drop-shadow(0px 0.5px 0px black) drop-shadow(0px -0.5px 0px black) drop-shadow(0.5px 0px 0px black) drop-shadow(-0.5px 0px 0px black);
-        const busIcon = L.divIcon({
-          className: 'custom-bus-marker',
-          html: `
-            <div style="
-              display: flex;
-              flex-direction: ${flexDir};
-              align-items: center;
-              justify-content: center;
-              transform: rotate(${BusMarkerRotation}deg);
-              font-family: inherit;
-              font-weight: 700;
-            ">
+          // pedropt10 - Create a custom divIcon for the bus marker
+          // external div: element rotation
+          // 1st internal div: triangle pointer (arrow-like)
+          // 2nd internal div: label with route_id
+          // filter: drop-shadow(0px 0.5px 0px black) drop-shadow(0px -0.5px 0px black) drop-shadow(0.5px 0px 0px black) drop-shadow(-0.5px 0px 0px black);
+          const busIcon = L.divIcon({
+            className: 'custom-bus-marker',
+            html: `
               <div style="
-                width: 0; height: 0; 
-                border-left: 6px solid transparent;
-                border-right: 6px solid transparent;
-                border-bottom: 9px solid ${bgColor};
-                transform: rotate(${arrowRotation}deg);
-                margin: ${marginStyle};
-                filter: drop-shadow(0 0 0.3px black) drop-shadow(0 0 0.3px black);
-                transform-origin: center;
-              "></div>
-              
-              <div style="
-                background-color: ${bgColor};
-                color: ${textColor};
-                padding: 2px 5px;
-                border-radius: 3px;
-                border: 1px solid black;
-                font-weight: bold;
-                font-size: 11px;
-                z-index: 2;
+                display: flex;
+                flex-direction: ${flexDir};
+                align-items: center;
+                justify-content: center;
+                transform: rotate(${BusMarkerRotation}deg);
                 font-family: inherit;
+                font-weight: 700;
               ">
-                ${v.route_id ?? '??'}
+                <div style="
+                  width: 0; height: 0; 
+                  border-left: 6px solid transparent;
+                  border-right: 6px solid transparent;
+                  border-bottom: 9px solid ${bgColor};
+                  transform: rotate(${arrowRotation}deg);
+                  margin: ${marginStyle};
+                  filter: drop-shadow(0 0 0.3px black) drop-shadow(0 0 0.3px black);
+                  transform-origin: center;
+                "></div>
+                
+                <div style="
+                  background-color: ${bgColor};
+                  color: ${textColor};
+                  padding: 2px 5px;
+                  border-radius: 3px;
+                  border: 1px solid black;
+                  font-weight: bold;
+                  font-size: 11px;
+                  z-index: 2;
+                  font-family: inherit;
+                ">
+                  ${v.route_id ?? '??'}
+                </div>
               </div>
-            </div>
-          `,
-          iconSize: [30, 30],
-          iconAnchor: [15, 15]
-        });
+            `,
+            iconSize: [30, 30],
+            iconAnchor: [15, 15]
+          });
 
-        return (
-          <React.Fragment key={v.vehicle_id}>
-            {prevPos ? (
-              <>
-                {/* <CircleMarker
-                  center={prevPos}
-                  radius={7}
-                  pathOptions={{ color: "red" }}
-                > */}
-                <CircleMarker
-                        center={prevPos}
-                        radius={5}
-                        pathOptions={{ 
-                          fillColor: bgColor, fillOpacity: 1, color: "#000000", weight: 1 
-                        }}
-                >
-                  <Popup>
-                    <div style={{ fontSize: 13 }}>
-                      <div><b>Location: PREVIOUS</b></div>
-                      <div><b>Route:</b> {v.route_id ?? "-"}</div>
-                      <div><b>Vehicle:</b> {label}</div>
-                      <div><b>Direction:</b> {v.direction ?? "-"}</div>
-                      <div><b>Observed:</b> {v.prev_observed_at ? new Date(v.prev_observed_at).toLocaleTimeString('pt-PT', { 
-                        hour: '2-digit', 
-                        minute: '2-digit', 
-                        second: '2-digit' 
-                      }) : "-"}</div>
-                      {/* <div><b>Trip:</b> {v.trip_id ?? "-"}</div> */}
-                      {/* <div><b>Lat,Lon:</b> {prevPos[0]}, {prevPos[1]}</div> */}
-                    </div>
-                  </Popup>
-                </CircleMarker>
-                {/* </CircleMarker> */}
-
-                {/*<Polyline
-                  positions={[prevPos, curPos]}
-                  pathOptions={{ color: "gray", weight: 2, dashArray: '5, 5' }} 
-                /> */}
-              </>
-            ) : null}
-
-            {/* <CircleMarker
-              center={curPos}
-              radius={8}
-              pathOptions={{ color: "green" }}
-            > */}
-            <Marker 
-              position={v.lat && v.lon ? [v.lat, v.lon] : curPos} 
-              icon={busIcon}
-            >
-              <Popup>
-                <div style={{ fontSize: 13 }}>
-                  {/* <div><b>CURRENT</b></div> */}
-                  <div><b>Location: {isOld ? "🔴 DELAYED" : "🟢 CURRENT"}</b></div>
-                  <div><b>Route:</b> {v.route_id ?? "-"}</div>
-                  <div><b>Vehicle:</b> {label}</div>
-                  <div><b>Direction:</b> {v.direction ?? "-"}</div>
-                  <div><b>Trip:</b> {v.trip_id ?? "-"}</div>
-                  {/* <div><b>Speed:</b> {v.speed ?? "-"} </div> */}
-                  <div><b>Observed:</b> {new Date(v.observed_at).toLocaleTimeString('pt-PT', { 
+          return (
+            <React.Fragment key={v.vehicle_id}>
+              {prevPos ? (
+                <>
+                  {/* <CircleMarker
+                    center={prevPos}
+                    radius={7}
+                    pathOptions={{ color: "red" }}
+                  > */}
+                  <CircleMarker
+                          center={prevPos}
+                          radius={5}
+                          pathOptions={{ 
+                            fillColor: bgColor, fillOpacity: 1, color: "#000000", weight: 1 
+                          }}
+                  >
+                    <Popup>
+                      <div style={{ fontSize: 13 }}>
+                        <div><b>Location: PREVIOUS</b></div>
+                        <div><b>Route:</b> {v.route_id ?? "-"}</div>
+                        <div><b>Vehicle:</b> {label}</div>
+                        <div><b>Direction:</b> {v.direction ?? "-"}</div>
+                        <div><b>Observed:</b> {v.prev_observed_at ? new Date(v.prev_observed_at).toLocaleTimeString('pt-PT', { 
                           hour: '2-digit', 
                           minute: '2-digit', 
                           second: '2-digit' 
-                        })}</div>
-                  {/* <div><b>Lat,Lon:</b> {curPos[0]}, {curPos[1]}</div> */}
-                </div>
-              </Popup>
-            </Marker>
-            {/* </CircleMarker> */}
-          </React.Fragment>
-        );
-      })}
+                        }) : "-"}</div>
+                        {/* <div><b>Trip:</b> {v.trip_id ?? "-"}</div> */}
+                        {/* <div><b>Lat,Lon:</b> {prevPos[0]}, {prevPos[1]}</div> */}
+                      </div>
+                    </Popup>
+                  </CircleMarker>
+                  {/* </CircleMarker> */}
+
+                  {/*<Polyline
+                    positions={[prevPos, curPos]}
+                    pathOptions={{ color: "gray", weight: 2, dashArray: '5, 5' }} 
+                  /> */}
+                </>
+              ) : null}
+
+              {/* <CircleMarker
+                center={curPos}
+                radius={8}
+                pathOptions={{ color: "green" }}
+              > */}
+              <Marker 
+                position={v.lat && v.lon ? [v.lat, v.lon] : curPos} 
+                icon={busIcon}
+              >
+                <Popup>
+                  <div style={{ fontSize: 13 }}>
+                    {/* <div><b>CURRENT</b></div> */}
+                    <div><b>Location: {isOld ? "🔴 DELAYED" : "🟢 CURRENT"}</b></div>
+                    <div><b>Route:</b> {v.route_id ?? "-"}</div>
+                    <div><b>Vehicle:</b> {label}</div>
+                    <div><b>Direction:</b> {v.direction ?? "-"}</div>
+                    <div><b>Trip:</b> {v.trip_id ?? "-"}</div>
+                    {/* <div><b>Speed:</b> {v.speed ?? "-"} </div> */}
+                    <div><b>Observed:</b> {new Date(v.observed_at).toLocaleTimeString('pt-PT', { 
+                            hour: '2-digit', 
+                            minute: '2-digit', 
+                            second: '2-digit' 
+                          })}</div>
+                    {/* <div><b>Lat,Lon:</b> {curPos[0]}, {curPos[1]}</div> */}
+                  </div>
+                </Popup>
+              </Marker>
+              {/* </CircleMarker> */}
+            </React.Fragment>
+          );
+        })}
+      </Pane>
     </MapContainer>
   );
 }
