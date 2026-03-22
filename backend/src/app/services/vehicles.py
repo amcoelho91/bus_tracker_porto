@@ -16,13 +16,15 @@ SELECT
 
   p.prev_observed_at,
   p.prev_lon,
-  p.prev_lat
+  p.prev_lat,
+  p.prev_heading
 FROM bus.vehicle_latest l
 LEFT JOIN LATERAL (
   SELECT
     o.observed_at AS prev_observed_at,
     ST_X(o.geom) AS prev_lon,
-    ST_Y(o.geom) AS prev_lat
+    ST_Y(o.geom) AS prev_lat,
+    o.heading AS prev_heading
   FROM bus.vehicle_observation o
   WHERE o.vehicle_id = l.vehicle_id
     AND o.observed_at < l.observed_at

@@ -78,6 +78,32 @@ def ensure_gtfs_tables():
                     PRIMARY KEY (shape_id, stop_sequence)
                 );
             """)
+
+            # 7. Calendar Table
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS gtfs.calendar (
+                    service_id TEXT PRIMARY KEY,
+                    monday INTEGER,
+                    tuesday INTEGER,
+                    wednesday INTEGER,
+                    thursday INTEGER,
+                    friday INTEGER,
+                    saturday INTEGER,
+                    sunday INTEGER,
+                    start_date TEXT,
+                    end_date TEXT
+                );
+            """)
+
+            # 8. Calendar Dates Table (Exceptions)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS gtfs.calendar_dates (
+                    service_id TEXT,
+                    date TEXT,
+                    exception_type INTEGER,
+                    PRIMARY KEY (service_id, date)
+                );
+            """)
             
             # Add indexes for the API queries
             cur.execute("CREATE INDEX IF NOT EXISTS idx_gtfs_shapes_route_dir ON gtfs.shapes(route_id, direction_id);")
@@ -203,23 +229,155 @@ def ingest_stop_times():
     print("Stop times ingested.")
 
 def associate_stops_to_shapes():
-    print("Building shape-to-stop associations...")
+    print("Building shape-to-stop associations using the longest available trips...")
     with psycopg.connect(DATABASE_URL) as conn:
         with conn.cursor() as cur:
+            # 1. Clear the table to ensure we don't keep partial route data
+            cur.execute("TRUNCATE gtfs.shape_stops;")
+            
+            # 2. Insert the stops from the trip that reaches the highest sequence number
             cur.execute("""
                 INSERT INTO gtfs.shape_stops (shape_id, stop_id, stop_sequence)
-                SELECT DISTINCT ON (t.shape_id, st.stop_sequence)
-                    t.shape_id,
+                WITH TripMaxSequence AS (
+                    -- Find the maximum sequence reached by each trip
+                    SELECT 
+                        t.shape_id, 
+                        t.trip_id, 
+                        MAX(st.stop_sequence) as final_sequence
+                    FROM gtfs.trips t
+                    JOIN gtfs.stop_times st ON t.trip_id = st.trip_id
+                    WHERE t.shape_id IS NOT NULL
+                    GROUP BY t.shape_id, t.trip_id
+                ),
+                LongestTrips AS (
+                    -- For each shape, pick the trip_id that has the absolute highest sequence
+                    SELECT DISTINCT ON (shape_id)
+                        shape_id,
+                        trip_id
+                    FROM TripMaxSequence
+                    ORDER BY shape_id, final_sequence DESC
+                )
+                -- Map the stops from that specific "Master Trip" to the shape
+                SELECT 
+                    lt.shape_id,
                     st.stop_id,
                     st.stop_sequence
-                FROM gtfs.trips t
-                JOIN gtfs.stop_times st ON t.trip_id = st.trip_id
-                WHERE t.shape_id IS NOT NULL
-                ORDER BY t.shape_id, st.stop_sequence, t.trip_id
+                FROM LongestTrips lt
+                JOIN gtfs.stop_times st ON lt.trip_id = st.trip_id
                 ON CONFLICT DO NOTHING;
             """)
             conn.commit()
-    print("Associations complete.")
+    print("Shape-to-stop associations built successfully.")
+    # print("Building shape-to-stop associations...")
+    # with psycopg.connect(DATABASE_URL) as conn:
+    #     with conn.cursor() as cur:
+    #         cur.execute("""
+    #             INSERT INTO gtfs.shape_stops (shape_id, stop_id, stop_sequence)
+    #             SELECT DISTINCT ON (t.shape_id, st.stop_sequence)
+    #                 t.shape_id,
+    #                 st.stop_id,
+    #                 st.stop_sequence
+    #             FROM gtfs.trips t
+    #             JOIN gtfs.stop_times st ON t.trip_id = st.trip_id
+    #             WHERE t.shape_id IS NOT NULL
+    #             ORDER BY t.shape_id, st.stop_sequence, t.trip_id
+    #             ON CONFLICT DO NOTHING;
+    #         """)
+    #         conn.commit()
+    # print("Associations complete.")
+
+def ingest_calendar():
+    path = os.path.join(GTFS_PATH, "calendar.txt")
+    print("Ingesting calendar.txt...")
+    with open(path, 'r', encoding='utf-8-sig') as f:
+        reader = csv.DictReader(f)
+        with psycopg.connect(DATABASE_URL) as conn:
+            with conn.cursor() as cur:
+                for row in reader:
+                    cur.execute("""
+                        INSERT INTO gtfs.calendar (
+                            service_id, monday, tuesday, wednesday, thursday, 
+                            friday, saturday, sunday, start_date, end_date
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        ON CONFLICT (service_id) DO UPDATE SET
+                            monday = EXCLUDED.monday, tuesday = EXCLUDED.tuesday,
+                            wednesday = EXCLUDED.wednesday, thursday = EXCLUDED.thursday,
+                            friday = EXCLUDED.friday, saturday = EXCLUDED.saturday,
+                            sunday = EXCLUDED.sunday, start_date = EXCLUDED.start_date,
+                            end_date = EXCLUDED.end_date
+                    """, (row['service_id'], row['monday'], row['tuesday'], row['wednesday'], 
+                          row['thursday'], row['friday'], row['saturday'], row['sunday'], 
+                          row['start_date'], row['end_date']))
+                conn.commit()
+
+def ingest_calendar_dates():
+    path = os.path.join(GTFS_PATH, "calendar_dates.txt")
+    print("Ingesting calendar_dates.txt...")
+    with open(path, 'r', encoding='utf-8-sig') as f:
+        reader = csv.DictReader(f)
+        with psycopg.connect(DATABASE_URL) as conn:
+            with conn.cursor() as cur:
+                for row in reader:
+                    cur.execute("""
+                        INSERT INTO gtfs.calendar_dates (service_id, date, exception_type)
+                        VALUES (%s, %s, %s)
+                        ON CONFLICT (service_id, date) DO UPDATE SET
+                            exception_type = EXCLUDED.exception_type
+                    """, (row['service_id'], row['date'], row['exception_type']))
+                conn.commit()
+
+def generate_service_calendar():
+    print("Generating the active service lookup table (service_by_date)...")
+    with psycopg.connect(DATABASE_URL) as conn:
+        with conn.cursor() as cur:
+            # 1. Create the lookup table
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS gtfs.service_by_date (
+                    date DATE,
+                    service_id TEXT,
+                    PRIMARY KEY (date, service_id)
+                );
+                TRUNCATE gtfs.service_by_date;
+            """)
+
+            # 2. Populate it by combining calendar and calendar_dates logic
+            cur.execute("""
+                INSERT INTO gtfs.service_by_date (date, service_id)
+                SELECT d.date, c.service_id
+                FROM (
+                    -- Generate all dates for 2026
+                    SELECT generate_series(
+                        '2026-01-01'::date, 
+                        '2026-12-31'::date, 
+                        '1 day'::interval
+                    )::date AS date
+                ) d
+                JOIN gtfs.calendar c ON 
+                    d.date >= TO_DATE(c.start_date, 'YYYYMMDD') AND 
+                    d.date <= TO_DATE(c.end_date, 'YYYYMMDD') AND (
+                        (EXTRACT(DOW FROM d.date) = 1 AND c.monday = 1) OR
+                        (EXTRACT(DOW FROM d.date) = 2 AND c.tuesday = 1) OR
+                        (EXTRACT(DOW FROM d.date) = 3 AND c.wednesday = 1) OR
+                        (EXTRACT(DOW FROM d.date) = 4 AND c.thursday = 1) OR
+                        (EXTRACT(DOW FROM d.date) = 5 AND c.friday = 1) OR
+                        (EXTRACT(DOW FROM d.date) = 6 AND c.saturday = 1) OR
+                        (EXTRACT(DOW FROM d.date) = 0 AND c.sunday = 1)
+                    )
+                -- Remove services that have an exception_type 2 (removed) for that date
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM gtfs.calendar_dates cd 
+                    WHERE cd.service_id = c.service_id 
+                      AND cd.date = TO_CHAR(d.date, 'YYYYMMDD') 
+                      AND cd.exception_type = 2
+                )
+                UNION
+                -- Add services that have an exception_type 1 (added) for that date
+                SELECT TO_DATE(cd.date, 'YYYYMMDD'), cd.service_id
+                FROM gtfs.calendar_dates cd
+                WHERE cd.exception_type = 1;
+            """)
+            conn.commit()
+    print("Service lookup table generated successfully.")
 
 if __name__ == "__main__":
     print(f"--- Starting GTFS Static Ingest at {datetime.now()} ---")
@@ -229,5 +387,8 @@ if __name__ == "__main__":
     ingest_stops()
     ingest_trips()
     ingest_stop_times()
+    ingest_calendar()
+    ingest_calendar_dates()
+    generate_service_calendar()
     associate_stops_to_shapes()
     print("--- Done ---")

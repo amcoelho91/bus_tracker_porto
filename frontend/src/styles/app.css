@@ -25,7 +25,7 @@ body {
 .leaflet-tooltip,
 .leaflet-marker-icon.custom-bus-marker,
 .custom-bus-marker {
-  font-family: 'Inter', sans-serif !important;
+  font-family: 'Inter', sans-serif !important; width: auto !important;
 }
 
 /* Ensure Form Elements (Selects/Inputs) match */
@@ -50,4 +50,9 @@ button, select, input, textarea {
 .leaflet-bar a {
     text-decoration: none;
     color: black;
+}
+
+.custom-heading-marker {
+  background: none !important;
+  border: none !important;
 }

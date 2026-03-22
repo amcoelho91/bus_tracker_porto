@@ -1,6 +1,6 @@
 import "leaflet/dist/leaflet.css";
 import React, { useMemo, useEffect, useState } from "react";
-import L from 'leaflet'; // pedropt10 - Import Leaflet for custom icons
+import L from 'leaflet'; // Import Leaflet for custom icons
 import { MapContainer, TileLayer, Popup, Polyline, CircleMarker, Marker, Pane } from "react-leaflet";
 import type { VehicleLatest, RouteShape, Stop } from "../api/client";
 
@@ -13,7 +13,6 @@ type Props = {
   stops: Stop[]; 
 };
 
-// pedropt10
 export const getRouteColors = (routeId: string | null, direction: number | string | null) => {
   // If direction is 0 OR null, use index 0. 
   const d = (direction === 1 || direction === "1") ? 1 : 0;
@@ -51,7 +50,7 @@ export const getRouteColors = (routeId: string | null, direction: number | strin
   return { bgColor, textColor, hasShadow };
 };
 
-// pedropt10 - added shapeData0 prop to receive route shapes from MapPage
+// added shapeData0 prop to receive route shapes from MapPage
 export function Map({ vehicles, shapeData0, shapeData1, selectedRoute, selectedDirection, stops }: Props) {
   // Colors for primary shape (Direction 0 or currently selected)
   const primaryColors = useMemo(() => 
@@ -64,6 +63,87 @@ export function Map({ vehicles, shapeData0, shapeData1, selectedRoute, selectedD
     getRouteColors(selectedRoute, 1), 
     [selectedRoute]
   );
+
+  // Helper to calculate minutes from HH:MM:SS
+  const getMinutesUntil = (arrivalTime: string) => {
+    const [h, m, s] = arrivalTime.split(':').map(Number);
+    const now = new Date();
+    const arrival = new Date();
+    // Handle GTFS 24h+ format (e.g., 25:00:00)
+    arrival.setHours(h, m, s); 
+    
+    const diffMs = arrival.getTime() - now.getTime();
+    const diffMins = Math.round(diffMs / 60000);
+    return diffMins > 0 ? `${diffMins}` : "0";
+  };
+
+  function StopArrivals({ stopId }: { stopId: string }) {
+    const [arrivals, setArrivals] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+      async function fetchArrivals() {
+        try {
+          const baseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+          const response = await fetch(`${baseUrl}/api/arrivals/${stopId}`);
+          const data = await response.json();
+          setArrivals(data);
+        } catch (error) {
+          console.error("Failed to fetch arrivals", error);
+        } finally {
+          setLoading(false);
+        }
+      }
+      fetchArrivals();
+    }, [stopId]);
+
+    if (loading) return <div style={{ padding: "10px", textAlign: "center" }}>Loading...</div>;
+    if (arrivals.length === 0) return <div style={{ padding: "10px", fontSize: "12px" }}>No upcoming arrivals.</div>;
+
+    return (
+      <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "8px", fontSize: "12px" }}>
+        <thead>
+          <tr style={{ borderBottom: "1px solid #eee", textAlign: "left", color: "#666" }}>
+            <th style={{ padding: "4px", textAlign: "center" }}>Route</th>
+            <th style={{ padding: "4px", textAlign: "left" }}>Destination</th>
+            <th style={{ padding: "4px", textAlign: "center" }}>🕒</th>
+          </tr>
+        </thead>
+        <tbody>
+          {arrivals.map((a, idx) => (
+            <tr key={idx} style={{ borderBottom: "1px solid #f9f9f9" }}>
+              <td style={{ padding: "4px", textAlign: "center", maxWidth: "8px", fontWeight: "bold" }}>{a.route_short_name}</td>
+              <td style={{ padding: "4px", textAlign: "left", maxWidth: "132px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {a.trip_headsign}
+              </td>
+              <td style={{ padding: "4px", textAlign: "center", maxWidth: "8px" }}>{getMinutesUntil(a.arrival_time)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    );
+  }
+
+  // Previous Bus location: Helper to create a triangular divIcon for vehicle heading
+  const getHeadingTriangle = (heading: number, fillColor: string) => {
+    return L.divIcon({
+      className: 'custom-heading-marker',
+          html: `
+            <div style="
+              width: 12px; height: 12px; background-color: black; /* This acts as the border */
+              clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+              display: flex; align-items: center; justify-content: center;
+              transform: rotate(${heading}deg); transform-origin: center;
+            ">
+              <div style="
+                width: 10px; height: 10px; background-color: ${fillColor}; 
+                clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+              "></div>
+            </div>`,
+          iconSize: [14, 14],
+          iconAnchor: [7, 7],
+      });
+  };
 
   const center = useMemo<[number, number]>(() => {
     if (shapeData0 && shapeData0.coordinates.length > 0) {
@@ -137,257 +217,274 @@ export function Map({ vehicles, shapeData0, shapeData1, selectedRoute, selectedD
         attribution='&copy; OpenStreetMap contributors'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
+
+      <Pane name="secondary-shape-pane" style={{ zIndex: 390 }} />
+      <Pane name="dominant-shape-pane" style={{ zIndex: 400 }} />
+      <Pane name="stops-pane" style={{ zIndex: 450 }} />
+      <Pane name="vehicle-previous-location-pane" style={{ zIndex: 600 }} />
+      <Pane name="vehicle-current-location-pane" style={{ zIndex: 650 }} />
+      <Pane name="popup-pane" style={{ zIndex: 700 }} />
       
       {/* Secondary Shape - Z-index 390 keeps it below Primary */}
-      <Pane name="secondary-pane" style={{ zIndex: 390 }}>
-        {shapeData1 && shapeData1.coordinates && shapeData1.coordinates.length > 0 && (
-          <>
-            {secondaryColors.hasShadow && (
-             <Polyline
-              key={`shadow-sec-${selectedRoute}`}
-              positions={shapeData1.coordinates}
-              pathOptions={{ color: "#000", weight: 6, opacity: 0.3, lineJoin: "round", lineCap: "round", pane: "secondary-pane" }} />)}
-            <Polyline 
-              key={`path-sec-${selectedRoute}`}
-              positions={shapeData1.coordinates}
-              pathOptions={{ color: secondaryColors.bgColor, weight: 4, opacity: 1.0, lineJoin: "round", lineCap: "round", pane: "secondary-pane" }} />
-          </>
-        )}
-      </Pane>
+      {shapeData1 && shapeData1.coordinates && shapeData1.coordinates.length > 0 && (
+        <>
+          {secondaryColors.hasShadow && (
+            <Polyline
+            key={`shadow-sec-${selectedRoute}`}
+            positions={shapeData1.coordinates}
+            pathOptions={{ color: "#000", weight: 6, opacity: 0.3, lineJoin: "round", lineCap: "round", pane: "secondary-shape-pane" }} />)}
+          <Polyline 
+            key={`path-sec-${selectedRoute}`}
+            positions={shapeData1.coordinates}
+            pathOptions={{ color: secondaryColors.bgColor, weight: 4, opacity: 1.0, lineJoin: "round", lineCap: "round", pane: "secondary-shape-pane" }} />
+        </>
+      )}
 
       {/* Primary Shape - Z-index 400 keeps it above Secondary */}
-      <Pane name="dominant-pane" style={{ zIndex: 400 }}>
-        {shapeData0 && shapeData0.coordinates && shapeData0.coordinates.length > 0 && (
-          <>
-            {primaryColors.hasShadow && (
-             <Polyline
-              key={`shadow-dom-${selectedRoute}`}
-              positions={shapeData0.coordinates}
-              pathOptions={{ color: "#000", weight: 8, opacity: 0.3, lineJoin: "round", lineCap: "round", pane: "dominant-pane" }} />)}
-            <Polyline 
-              key={`path-dom-${selectedRoute}`}
-              positions={shapeData0.coordinates}
-              pathOptions={{ color: primaryColors.bgColor, weight: 5, opacity: 1.0, lineJoin: "round", lineCap: "round", pane: "dominant-pane" }} />
-          </>
-        )}
-      </Pane>
+      {shapeData0 && shapeData0.coordinates && shapeData0.coordinates.length > 0 && (
+        <>
+          {primaryColors.hasShadow && (
+            <Polyline
+            key={`shadow-dom-${selectedRoute}`}
+            positions={shapeData0.coordinates}
+            pathOptions={{ color: "#000", weight: 8, opacity: 0.3, lineJoin: "round", lineCap: "round", pane: "dominant-shape-pane" }} />)}
+          <Polyline 
+            key={`path-dom-${selectedRoute}`}
+            positions={shapeData0.coordinates}
+            pathOptions={{ color: primaryColors.bgColor, weight: 5, opacity: 1.0, lineJoin: "round", lineCap: "round", pane: "dominant-shape-pane" }} />
+        </>
+      )}
 
       {/* Render the Stops */}
-      <Pane name="stops-pane" style={{ zIndex: 500 }}>
-        {stops.map((stop: Stop) => (
-          <CircleMarker
-            key={stop.stop_id}
-            center={[stop.lat, stop.lon]}
-            radius={5}
-            pathOptions={{
-              color: primaryColors.bgColor,
-              fillColor: primaryColors.textColor,
-              fillOpacity: 1,
-              weight: 2
-            }}
-          >
-            <Popup>
-              <div style={{ fontSize: "14px" }}>
-                <div style={{ marginBottom: "5px" }}>
-                  <strong>{stop.stop_name}</strong>
-                </div>
-                <div style={{ color: "#666", fontSize: "12px", marginBottom: "8px" }}>
-                  ID: {stop.stop_id}
-                </div>
-                {stop.stop_url && (
-                  <a 
-                    href={stop.stop_url} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    style={{ 
-                      color: "#187EC2", 
-                      textDecoration: "none", 
-                      fontWeight: "bold",
-                      display: "block",
-                      borderTop: "1px solid #eee",
-                      paddingTop: "5px"
-                    }}
-                  >
-                    View Timetables →
-                  </a>
-                )}
+      {stops.map((stop: Stop) => (
+        <CircleMarker
+          key={stop.stop_id}
+          center={[stop.lat, stop.lon]}
+          radius={5}
+          pane="stops-pane"
+          pathOptions={{
+            color: primaryColors.bgColor, fillColor: primaryColors.textColor, fillOpacity: 1, weight: 2
+          }}
+        >
+          <Popup pane="popup-pane">
+            <div style={{ fontSize: "14px", width: "200px" }}>
+              <div style={{ marginBottom: "5px" }}>
+                <strong>{stop.stop_name}</strong>
               </div>
-            </Popup>
-          </CircleMarker>
-      ))}</Pane>
+              <div style={{ color: "#666", fontSize: "12px", marginBottom: "8px" }}>
+                ID: {stop.stop_id}
+              </div>
+              <div style={{ borderTop: "1px solid #eee", marginBottom: "8px" }}>
+                <StopArrivals stopId={stop.stop_id} />
+              </div>
+              {stop.stop_url && (
+                <a 
+                  href={stop.stop_url} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  style={{ 
+                    color: "#187EC2", textDecoration: "none", fontWeight: "bold",
+                    display: "block", borderTop: "1px solid #eee", paddingTop: "5px"
+                  }}
+                >
+                  View Timetables →
+                </a>
+              )}
+            </div>
+          </Popup>
+        </CircleMarker>
+      ))}
 
-      <Pane name="vehicle-location-pane" style={{ zIndex: 600 }}>
-        {/* Render the Vehicles' markers with route info*/}
-        {vehicles.map((v) => {
-          const label = v.fleet_vehicle_id ?? v.vehicle_id;
-          const hasPrev =
-            v.prev_lat !== null &&
-            v.prev_lon !== null &&
-            (v.prev_lat !== v.lat || v.prev_lon !== v.lon);
+      {/* Render the Vehicles' markers with route info*/}
+      {vehicles.map((v) => {
+        const label = v.fleet_vehicle_id ?? v.vehicle_id;
+        const hasPrev =
+          v.prev_lat !== null &&
+          v.prev_lon !== null &&
+          (v.prev_lat !== v.lat || v.prev_lon !== v.lon);
 
-          const prevPos: [number, number] | null = hasPrev ? [v.prev_lat as number, v.prev_lon as number] : null;
-          const curPos: [number, number] = [v.lat, v.lon];
+        const prevPos: [number, number] | null = hasPrev ? [v.prev_lat as number, v.prev_lon as number] : null;
+        const curPos: [number, number] = [v.lat, v.lon];
+        const prevHeading = v.prev_heading ?? 0;
 
-          // pedropt10 - Determine if the observation is older than 2 minutes
-          // useMemo ensures this calculation only runs when observed_at changes, improving performance
-          const obsTime = new Date(v.observed_at).getTime();
-          const now = Date.now();
-          const isOld = (now - obsTime) > (2 * 60 * 1000); // 2 minutes
+        // Determine if the observation is older than 2 minutes
+        // useMemo ensures this calculation only runs when observed_at changes, improving performance
+        const obsTime = new Date(v.observed_at).getTime();
+        const now = Date.now();
+        const isOld = (now - obsTime) > (2 * 60 * 1000); // 2 minutes
 
-          // pedropt10 - Get colors based on route and direction
-          const { bgColor: routeBg, textColor: routeText, hasShadow } = getRouteColors(v.route_id, v.direction);
+        // Get colors based on route and direction
+        const { bgColor: routeBg, textColor: routeText, hasShadow } = getRouteColors(v.route_id, v.direction);
+        const { bgColor: routeMainBgColor, textColor: routeMainTextColor } = getRouteColors(v.route_id, 0);
 
-          // Override colors if observation is older than 2 minutes, otherwise use route colors
-          const bgColor = isOld ? '#a3a3a3' : routeBg;
-          const textColor = isOld ? '#FFFFFF' : routeText;
+        // Override colors if observation is older than 2 minutes, otherwise use route colors
+        const bgColor = isOld ? '#a3a3a3' : routeBg;
+        const textColor = isOld ? '#FFFFFF' : routeText;
 
-          const heading = v.heading ?? 0;
-          let BusMarkerRotation = 0;
-          let flexDir: "column" | "row" | "column-reverse" | "row-reverse" = "column";
-          let arrowRotation = 0;
-          let marginStyle = "0px"; // Default margin for arrow
+        // Current Bus Marker
+        const cur_heading = v.heading ?? 0;
+        let curBusMarkerRotation = 0;
+        let flexDir: "column" | "row" | "column-reverse" | "row-reverse" = "column";
+        let arrowRotation = 0;
+        let marginStyle = "0px"; // Default margin for arrow
 
-          // Quadrant logic:
-          if (heading >= 315 || heading < 45) { // North (NW to NE)
-            BusMarkerRotation = heading;
-            flexDir = "column";         // Arrow on TOP
-            arrowRotation = 0;
-          } else if (heading >= 45 && heading < 135) { // East (NE to SE)
-            BusMarkerRotation = heading - 90;
-            flexDir = "row-reverse";    // Arrow on RIGHT
-            arrowRotation = 90;
-            marginStyle = "0 0 0 -1px"; // Pulls it 3px closer from the Right
-          } else if (heading >= 135 && heading < 225) { // South (SE to SW)
-            BusMarkerRotation = heading - 180;
-            flexDir = "column-reverse"; // Arrow on BOTTOM
-            arrowRotation = 180;
-          } else { // West (SW to NW)
-            BusMarkerRotation = heading - 270;
-            flexDir = "row";            // Arrow on LEFT
-            arrowRotation = 270;
-            marginStyle = "0 -1px 0 0"; // Pulls it 3px closer from the Left
-          }
+        // Quadrant logic:
+        if (cur_heading >= 315 || cur_heading < 45) { // North (NW to NE)
+          curBusMarkerRotation = cur_heading;
+          flexDir = "column";         // Arrow on TOP
+          arrowRotation = 0;
+        } else if (cur_heading >= 45 && cur_heading < 135) { // East (NE to SE)
+          curBusMarkerRotation = cur_heading - 90;
+          flexDir = "row-reverse";    // Arrow on RIGHT
+          arrowRotation = 90;
+          marginStyle = "0 0 0 -1px"; // Pulls it 3px closer from the Right
+        } else if (cur_heading >= 135 && cur_heading < 225) { // South (SE to SW)
+          curBusMarkerRotation = cur_heading - 180;
+          flexDir = "column-reverse"; // Arrow on BOTTOM
+          arrowRotation = 180;
+        } else { // West (SW to NW)
+          curBusMarkerRotation = cur_heading - 270;
+          flexDir = "row";            // Arrow on LEFT
+          arrowRotation = 270;
+          marginStyle = "0 -1px 0 0"; // Pulls it 3px closer from the Left
+        }
 
-          // pedropt10 - Create a custom divIcon for the bus marker
-          // external div: element rotation
-          // 1st internal div: triangle pointer (arrow-like)
-          // 2nd internal div: label with route_id
-          // filter: drop-shadow(0px 0.5px 0px black) drop-shadow(0px -0.5px 0px black) drop-shadow(0.5px 0px 0px black) drop-shadow(-0.5px 0px 0px black);
-          const busIcon = L.divIcon({
-            className: 'custom-bus-marker',
-            html: `
+        // Create a custom divIcon for the bus marker
+        // external div: element rotation
+        // 1st internal div: triangle pointer (arrow-like)
+        // 2nd internal div: label with route_id
+        // filter: drop-shadow(0px 0.5px 0px black) drop-shadow(0px -0.5px 0px black) drop-shadow(0.5px 0px 0px black) drop-shadow(-0.5px 0px 0px black);
+        const busIcon = L.divIcon({
+          className: 'custom-bus-marker',
+          html: `
+            <div style="
+              display: flex;
+              flex-direction: ${flexDir};
+              align-items: center;
+              justify-content: center;
+              transform: rotate(${curBusMarkerRotation}deg);
+              font-family: inherit;
+              font-weight: 700;
+            ">
               <div style="
-                display: flex;
-                flex-direction: ${flexDir};
-                align-items: center;
-                justify-content: center;
-                transform: rotate(${BusMarkerRotation}deg);
+                width: 0; height: 0; 
+                border-left: 6px solid transparent;
+                border-right: 6px solid transparent;
+                border-bottom: 9px solid ${bgColor};
+                transform: rotate(${arrowRotation}deg);
+                margin: ${marginStyle};
+                filter: drop-shadow(0 0 0.3px black) drop-shadow(0 0 0.3px black);
+                transform-origin: center;
+              "></div>
+              
+              <div style="
+                background-color: ${bgColor};
+                color: ${textColor};
+                padding: 2px 5px;
+                border-radius: 3px;
+                border: 1px solid black;
+                font-weight: bold;
+                font-size: 11px;
+                z-index: 2;
                 font-family: inherit;
-                font-weight: 700;
               ">
-                <div style="
-                  width: 0; height: 0; 
-                  border-left: 6px solid transparent;
-                  border-right: 6px solid transparent;
-                  border-bottom: 9px solid ${bgColor};
-                  transform: rotate(${arrowRotation}deg);
-                  margin: ${marginStyle};
-                  filter: drop-shadow(0 0 0.3px black) drop-shadow(0 0 0.3px black);
-                  transform-origin: center;
-                "></div>
-                
-                <div style="
-                  background-color: ${bgColor};
-                  color: ${textColor};
-                  padding: 2px 5px;
-                  border-radius: 3px;
-                  border: 1px solid black;
-                  font-weight: bold;
-                  font-size: 11px;
-                  z-index: 2;
-                  font-family: inherit;
-                ">
-                  ${v.route_id ?? '??'}
-                </div>
+                ${v.route_id ?? '??'}
               </div>
-            `,
-            iconSize: [30, 30],
-            iconAnchor: [15, 15]
-          });
+            </div>
+          `,
+          iconSize: [30, 30],
+          iconAnchor: [15, 15]
+        });
 
-          return (
-            <React.Fragment key={v.vehicle_id}>
-              {prevPos ? (
-                <>
-                  {/* <CircleMarker
-                    center={prevPos}
-                    radius={7}
-                    pathOptions={{ color: "red" }}
-                  > */}
-                  <CircleMarker
-                          center={prevPos}
-                          radius={5}
-                          pathOptions={{ 
-                            fillColor: bgColor, fillOpacity: 1, color: "#000000", weight: 1 
-                          }}
-                  >
-                    <Popup>
-                      <div style={{ fontSize: 13 }}>
-                        <div><b>Location: PREVIOUS</b></div>
-                        <div><b>Route:</b> {v.route_id ?? "-"}</div>
-                        <div><b>Vehicle:</b> {label}</div>
-                        <div><b>Direction:</b> {v.direction ?? "-"}</div>
-                        <div><b>Observed:</b> {v.prev_observed_at ? new Date(v.prev_observed_at).toLocaleTimeString('pt-PT', { 
-                          hour: '2-digit', 
-                          minute: '2-digit', 
-                          second: '2-digit' 
-                        }) : "-"}</div>
-                        {/* <div><b>Trip:</b> {v.trip_id ?? "-"}</div> */}
-                        {/* <div><b>Lat,Lon:</b> {prevPos[0]}, {prevPos[1]}</div> */}
-                      </div>
-                    </Popup>
-                  </CircleMarker>
-                  {/* </CircleMarker> */}
-
-                  {/*<Polyline
-                    positions={[prevPos, curPos]}
-                    pathOptions={{ color: "gray", weight: 2, dashArray: '5, 5' }} 
-                  /> */}
-                </>
-              ) : null}
-
-              {/* <CircleMarker
-                center={curPos}
-                radius={8}
-                pathOptions={{ color: "green" }}
-              > */}
-              <Marker 
-                position={v.lat && v.lon ? [v.lat, v.lon] : curPos} 
-                icon={busIcon}
+        return (
+          <React.Fragment key={v.vehicle_id}>
+            {prevPos ? (
+              <Marker
+                position={prevPos}
+                icon={getHeadingTriangle(prevHeading, bgColor)}
+                pane="vehicle-previous-location-pane"
               >
-                <Popup>
-                  <div style={{ fontSize: 13 }}>
-                    {/* <div><b>CURRENT</b></div> */}
-                    <div><b>Location: {isOld ? "🔴 DELAYED" : "🟢 CURRENT"}</b></div>
-                    <div><b>Route:</b> {v.route_id ?? "-"}</div>
-                    <div><b>Vehicle:</b> {label}</div>
-                    <div><b>Direction:</b> {v.direction ?? "-"}</div>
-                    <div><b>Trip:</b> {v.trip_id ?? "-"}</div>
-                    {/* <div><b>Speed:</b> {v.speed ?? "-"} </div> */}
-                    <div><b>Observed:</b> {new Date(v.observed_at).toLocaleTimeString('pt-PT', { 
-                            hour: '2-digit', 
-                            minute: '2-digit', 
-                            second: '2-digit' 
-                          })}</div>
-                    {/* <div><b>Lat,Lon:</b> {curPos[0]}, {curPos[1]}</div> */}
+                <Popup pane="popup-pane" minWidth={100}>
+                  <div style={{ fontSize: 13, minWidth: "100px", whiteSpace: "nowrap" }}>
+                    <div>⬜ PREVIOUS</div>
+                    <div>⬜ LOCATION</div><br></br>
+                    <div style={{ 
+                      backgroundColor: routeMainBgColor, color: routeMainTextColor, 
+                      padding: "2px 6px", borderRadius: 4, minWidth: 20,
+                      display: "inline-block", textAlign: "center"
+                    }}><b>{v.route_id ?? "-"}</b></div>
+                    <div>🚌 {label}</div>
+                    <div>⌚ {v.prev_observed_at ? new Date(v.prev_observed_at).toLocaleTimeString('pt-PT', { 
+                      hour: '2-digit', minute: '2-digit', second: '2-digit' 
+                    }) : "-"}</div>
+                    {/* <div><b>Trip:</b> {v.trip_id ?? "-"}</div> */}
                   </div>
                 </Popup>
               </Marker>
-              {/* </CircleMarker> */}
-            </React.Fragment>
-          );
-        })}
-      </Pane>
+              // <>
+              //   {/* <CircleMarker
+              //     center={prevPos}
+              //     radius={7}
+              //     pathOptions={{ color: "red" }}
+              //   > */}
+              //   <CircleMarker
+              //     center={prevPos}
+              //     radius={5}
+              //     pane="vehicle-previous-location-pane"
+              //     pathOptions={{ 
+              //       fillColor: bgColor, fillOpacity: 1, color: "#000000", weight: 1 
+              //     }}
+              //   >
+              //     <Popup pane="popup-pane">
+              //       <div style={{ fontSize: 13 }}>
+              //         <div><b>Location: PREVIOUS</b></div>
+              //         <div><b>Route:</b> {v.route_id ?? "-"}</div>
+              //         <div><b>Vehicle:</b> {label}</div>
+              //         <div><b>Direction:</b> {v.direction ?? "-"}</div>
+              //         <div><b>Observed:</b> {v.prev_observed_at ? new Date(v.prev_observed_at).toLocaleTimeString('pt-PT', { 
+              //           hour: '2-digit', 
+              //           minute: '2-digit', 
+              //           second: '2-digit' 
+              //         }) : "-"}</div>
+              //         {/* <div><b>Trip:</b> {v.trip_id ?? "-"}</div> */}
+              //         {/* <div><b>Lat,Lon:</b> {prevPos[0]}, {prevPos[1]}</div> */}
+              //       </div>
+              //     </Popup>
+              //   </CircleMarker>
+              //   {/* </CircleMarker> */}
+
+              //   {/*<Polyline
+              //     positions={[prevPos, curPos]}
+              //     pathOptions={{ color: "gray", weight: 2, dashArray: '5, 5' }} 
+              //   /> */}
+              // </>
+            ) : null}
+
+            <Marker 
+              position={v.lat && v.lon ? [v.lat, v.lon] : curPos} 
+              icon={busIcon}
+              pane="vehicle-current-location-pane"
+            >
+              <Popup pane="popup-pane" minWidth={100}>
+                <div style={{ fontSize: 13, minWidth: "100px", whiteSpace: "nowrap" }}>
+                  <div><b>{isOld ? "🔴 DELAYED LOCATION" : "🟢 CURRENT LOCATION"}</b></div><br></br>
+                  <div style={{ 
+                    backgroundColor: routeMainBgColor, color: routeMainTextColor, 
+                    padding: "2px 6px", borderRadius: 4, minWidth: 20,
+                    display: "inline-block", textAlign: "center"
+                  }}><b>{v.route_id ?? "-"}</b></div>
+                  <div>⬅  {v.direction ?? "-"}</div>
+                  <div>🚌 {label}</div>
+                  <div><b>⌚</b> {new Date(v.observed_at).toLocaleTimeString('pt-PT', { 
+                          hour: '2-digit', minute: '2-digit', second: '2-digit' 
+                        })}</div>
+                  <div><b>Trip:</b> {v.trip_id ?? "-"}</div>
+                </div>
+              </Popup>
+            </Marker>
+          </React.Fragment>
+        );
+      })}
     </MapContainer>
   );
 }

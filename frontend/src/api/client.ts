@@ -14,6 +14,7 @@ export type VehicleLatest = {
   prev_observed_at: string | null;
   prev_lon: number | null;
   prev_lat: number | null;
+  prev_heading: number | null;
 };
 
 export type Stop = {
@@ -43,6 +44,12 @@ export async function fetchLatest(routeId?: string, direction?: number | null): 
 export type RouteShape = {
   coordinates: [number, number][];
   color: string;
+};
+
+export type StopPlannedArrival = {
+  route_id: string;
+  trip_headsign: string;
+  arrival_time: string;
 };
 
 export async function fetchRouteShape(routeId: string, directionId: number | null): Promise<RouteShape | null> {
@@ -97,6 +104,19 @@ export async function fetchStops(routeId: string, directionId: number | null): P
     return res.json();
   } catch (err) {
     console.error("Error fetching stops:", err);
+    return [];
+  }
+}
+
+export async function fetchPlannedArrivals(stopId: string): Promise<StopPlannedArrival[]> {
+  const url = `${API_BASE}/api/arrivals/${stopId}`;
+
+  try {
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) return [];
+    return await res.json();
+  } catch (err) {
+    console.error("Error fetching planned arrivals:", err);
     return [];
   }
 }

@@ -34,7 +34,8 @@ services:
       - ./backend:/app
     ports:
       - "${BACKEND_PORT}:8000"
-    command: ["python", "-m", "app.main"]
+    # command: ["python", "-m", "app.main"]
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
   backend_worker:
     build:

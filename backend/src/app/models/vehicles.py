@@ -19,3 +19,4 @@ class VehicleLatest(BaseModel):
     prev_observed_at: datetime | None = None
     prev_lon: float | None = None
     prev_lat: float | None = None
+    prev_heading: int | None = None

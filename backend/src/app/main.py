@@ -6,6 +6,7 @@ from app.api.routes import router as routes_router
 from app.api.health import router as health_router
 from app.api.shapes import router as shapes_router
 from app.api.stops import router as stops_router
+from app.api.stoptimes_planned import router as stoptimes_planned_router
 from app.api.vehicles import router as vehicles_router
 
 app = FastAPI(title="Bus Tracker API", version="0.1.0")
@@ -33,6 +34,7 @@ app.include_router(health_router, prefix="/api")
 app.include_router(shapes_router, prefix="/api")
 app.include_router(vehicles_router, prefix="/api")
 app.include_router(stops_router, prefix="/api", tags=["Stops"])
+app.include_router(stoptimes_planned_router, prefix="/api", tags=["Planned Stop Times"])
 
 if __name__ == "__main__":
     import uvicorn

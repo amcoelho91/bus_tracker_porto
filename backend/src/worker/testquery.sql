@@ -1,0 +1,1 @@
+ALTER TABLE bus.vehicle_latest DROP COLUMN IF EXISTS prev_heading;
