@@ -1,0 +1,3 @@
+route_id,route_short_name,route_long_name,route_desc,route_type,route_url,route_color,route_text_color
+203,203,Estádio do Dragão - Boavista (Casa Música),,3,http://www.stcp.pt/pt/viajar/linhas/?linha=203,187EC2,FFFFFF
+900,900,Cordoaria - Francelos,,3,http://www.stcp.pt/pt/viajar/linhas/?linha=900,FF7900,FFFFFF

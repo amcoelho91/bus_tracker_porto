@@ -5,6 +5,8 @@ from datetime import datetime
 
 DATABASE_URL = os.environ["DATABASE_URL"]
 GTFS_PATH = os.path.join(os.getcwd(), "gtfs")
+GTFS_OVERRIDE_PATH = os.path.join(GTFS_PATH, "override")  # For any manual corrections or additions to the GTFS data (e.g., missing shapes, corrected stop locations, etc.)
+
 
 def ensure_gtfs_tables():
     """Creates the static GTFS tables in the bus schema."""
@@ -109,124 +111,144 @@ def ensure_gtfs_tables():
             cur.execute("CREATE INDEX IF NOT EXISTS idx_gtfs_shapes_route_dir ON gtfs.shapes(route_id, direction_id);")
             conn.commit()
 
+
+def ingest_with_overrides(filename, sql_query, base_path=GTFS_PATH, override_path=GTFS_OVERRIDE_PATH):
+    """
+    Ingests a base GTFS file followed by its override counterpart.
+    The sql_query MUST include an ON CONFLICT clause to handle overrides.
+    """
+    files_to_process = [
+        os.path.join(base_path, filename),
+        os.path.join(override_path, filename)
+    ]
+
+    with psycopg.connect(DATABASE_URL) as conn:
+        with conn.cursor() as cur:
+            for file_path in files_to_process:
+                if not os.path.exists(file_path):
+                    continue
+                
+                print(f"Processing {file_path}...")
+                with open(file_path, mode='r', encoding='utf-8-sig') as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        params = {k: (v if v != '' else None) for k, v in row.items()}
+                        # This assumes your query uses named placeholders like %(route_id)s
+                        cur.execute(sql_query, params)
+            conn.commit()
+
+
 def ingest_routes():
-    path = os.path.join(GTFS_PATH, "routes.txt")
-    with open(path, 'r', encoding='utf-8-sig') as f:
-        reader = csv.DictReader(f)
-        with psycopg.connect(DATABASE_URL) as conn:
-            with conn.cursor() as cur:
-                for row in reader:
-                    cur.execute("""
-                        INSERT INTO gtfs.routes (route_id, route_short_name, route_long_name, route_color, route_text_color)
-                        VALUES (%s, %s, %s, %s, %s)
-                        ON CONFLICT (route_id) DO UPDATE SET
-                            route_short_name = EXCLUDED.route_short_name,
-                            route_long_name = EXCLUDED.route_long_name,
-                            route_color = EXCLUDED.route_color,
-                            route_text_color = EXCLUDED.route_text_color
-                    """, (row['route_id'], row['route_short_name'], row['route_long_name'], 
-                          row.get('route_color', '000000'), row.get('route_text_color', 'FFFFFF')))
-                print(f"Ingested routes from {path}")
+    print("Ingesting routes with potential overrides...")
+    sql = """
+        INSERT INTO gtfs.routes (route_id, route_short_name, route_long_name, route_color, route_text_color)
+        VALUES (%(route_id)s, %(route_short_name)s, %(route_long_name)s, %(route_color)s, %(route_text_color)s)
+        ON CONFLICT (route_id) DO UPDATE SET
+            route_short_name = EXCLUDED.route_short_name,
+            route_long_name = EXCLUDED.route_long_name,
+            route_color = EXCLUDED.route_color,
+            route_text_color = EXCLUDED.route_text_color;
+    """
+    ingest_with_overrides("routes.txt", sql)
 
-def ingest_shapes():
-    path = os.path.join(GTFS_PATH, "shapes.txt")
-    shape_points = {}
 
-    print("Reading shapes.txt and parsing IDs...")
-    with open(path, 'r', encoding='utf-8-sig') as f:
+def process_shapes_file(file_path, cur):
+    """Internal helper to process a specific shapes.txt file."""
+    if not os.path.exists(file_path):
+        return
+
+    print(f"Processing shapes from {file_path}...")
+    shapes = {}
+    with open(file_path, mode='r', encoding='utf-8-sig') as f:
         reader = csv.DictReader(f)
         for row in reader:
             sid = row['shape_id']
-            if sid not in shape_points:
-                # Logic: 704_0_1_shp -> route_id: 704, direction_id: 0
+            if sid not in shapes:
                 parts = sid.split('_')
                 route_id = parts[0]
                 direction_id = int(parts[1]) if len(parts) > 1 else 0
                 
-                shape_points[sid] = {
+                shapes[sid] = {
                     'route_id': route_id,
                     'direction_id': direction_id,
                     'pts': []
                 }
             
-            shape_points[sid]['pts'].append({
+            shapes[sid]['pts'].append({
                 'lat': float(row['shape_pt_lat']),
                 'lon': float(row['shape_pt_lon']),
                 'seq': int(row['shape_pt_sequence'])
             })
 
-    print(f"Building geometries for {len(shape_points)} shapes...")
+    print(f"Building geometries for {len(shapes)} shapes from {os.path.basename(file_path)}...")
+    for sid, data in shapes.items():
+        pts = data['pts']
+        pts.sort(key=lambda x: x['seq'])
+        
+        wkt_points = ", ".join([f"{p['lon']} {p['lat']}" for p in pts])
+        linestring_wkt = f"LINESTRING({wkt_points})"
+
+        # UPSERT logic: If shape_id exists (from base), replace the geom (from override)
+        cur.execute("""
+            INSERT INTO gtfs.shapes (shape_id, route_id, direction_id, geom)
+            VALUES (%s, %s, %s, ST_GeomFromText(%s, 4326))
+            ON CONFLICT (shape_id) DO UPDATE SET
+                geom = EXCLUDED.geom,
+                route_id = EXCLUDED.route_id,
+                direction_id = EXCLUDED.direction_id;
+        """, (sid, data['route_id'], data['direction_id'], linestring_wkt))
+
+
+def ingest_shapes():
+    print("Ingesting shapes with potential overrides...")
     with psycopg.connect(DATABASE_URL) as conn:
         with conn.cursor() as cur:
-            for sid, data in shape_points.items():
-                pts = data['pts']
-                pts.sort(key=lambda x: x['seq'])
-                
-                wkt_points = ", ".join([f"{p['lon']} {p['lat']}" for p in pts])
-                linestring_wkt = f"LINESTRING({wkt_points})"
+            # 1. Process Base Files
+            base_file = os.path.join(GTFS_PATH, "shapes.txt")
+            process_shapes_file(base_file, cur)
 
-                cur.execute("""
-                    INSERT INTO gtfs.shapes (shape_id, route_id, direction_id, geom)
-                    VALUES (%s, %s, %s, ST_GeomFromText(%s, 4326))
-                    ON CONFLICT (shape_id) DO UPDATE SET
-                        geom = EXCLUDED.geom,
-                        route_id = EXCLUDED.route_id,
-                        direction_id = EXCLUDED.direction_id
-                """, (sid, data['route_id'], data['direction_id'], linestring_wkt))
+            # 2. Process Override Files
+            override_file = os.path.join(GTFS_OVERRIDE_PATH, "shapes.txt")
+            process_shapes_file(override_file, cur)
+            
             conn.commit()
     print("Shapes ingestion complete.")
 
+
 def ingest_stops():
-    path = os.path.join(GTFS_PATH, "stops.txt")
-    with open(path, 'r', encoding='utf-8-sig') as f:
-        reader = csv.DictReader(f)
-        with psycopg.connect(DATABASE_URL) as conn:
-            with conn.cursor() as cur:
-                for row in reader:
-                    cur.execute("""
-                        INSERT INTO gtfs.stops (stop_id, stop_name, stop_lat, stop_lon, zone_id, stop_url)
-                        VALUES (%s, %s, %s, %s, %s, %s)
-                        ON CONFLICT (stop_id) DO UPDATE SET
-                            stop_name = EXCLUDED.stop_name
-                    """, (row['stop_id'], row['stop_name'], row['stop_lat'], row['stop_lon'], 
-                          row.get('zone_id'), row.get('stop_url')))
-                conn.commit()
+    print("Ingesting stops with potential overrides...")
+    sql = """
+        INSERT INTO gtfs.stops (stop_id, stop_name, stop_lat, stop_lon, zone_id, stop_url)
+        VALUES (%(stop_id)s, %(stop_name)s, %(stop_lat)s, %(stop_lon)s, %(zone_id)s, %(stop_url)s)
+        ON CONFLICT (stop_id) DO UPDATE SET
+            stop_name = EXCLUDED.stop_name;
+    """
+    # Note: we use the dictionary directly from DictReader via the helper
+    ingest_with_overrides("stops.txt", sql)
     print("Stops ingested.")
 
+
 def ingest_trips():
-    path = os.path.join(GTFS_PATH, "trips.txt")
-    with open(path, 'r', encoding='utf-8-sig') as f:
-        reader = csv.DictReader(f)
-        with psycopg.connect(DATABASE_URL) as conn:
-            with conn.cursor() as cur:
-                for row in reader:
-                    cur.execute("""
-                        INSERT INTO gtfs.trips (trip_id, route_id, direction_id, service_id, trip_headsign, shape_id)
-                        VALUES (%s, %s, %s, %s, %s, %s)
-                        ON CONFLICT (trip_id) DO NOTHING
-                    """, (row['trip_id'], row['route_id'], row['direction_id'], row['service_id'], 
-                          row.get('trip_headsign'), row['shape_id']))
-                conn.commit()
+    print("Ingesting trips with potential overrides...")
+    sql = """
+        INSERT INTO gtfs.trips (trip_id, route_id, direction_id, service_id, trip_headsign, shape_id)
+        VALUES (%(trip_id)s, %(route_id)s, %(direction_id)s, %(service_id)s, %(trip_headsign)s, %(shape_id)s)
+        ON CONFLICT (trip_id) DO NOTHING;
+    """
+    ingest_with_overrides("trips.txt", sql)
     print("Trips ingested.")
 
+
 def ingest_stop_times():
-    path = os.path.join(GTFS_PATH, "stop_times.txt")
-    print("Ingesting stop_times (this might take a while)...")
-    with open(path, 'r', encoding='utf-8-sig') as f:
-        reader = csv.DictReader(f)
-        with psycopg.connect(DATABASE_URL) as conn:
-            with conn.cursor() as cur:
-                # Using a batch approach here because stop_times is usually HUGE
-                # But for simplicity, following your existing pattern:
-                for row in reader:
-                    cur.execute("""
-                        INSERT INTO gtfs.stop_times (trip_id, stop_id, stop_sequence, arrival_time, departure_time)
-                        VALUES (%s, %s, %s, %s, %s)
-                        ON CONFLICT DO NOTHING
-                    """, (row['trip_id'], row['stop_id'], row['stop_sequence'], 
-                          row['arrival_time'], row['departure_time']))
-                conn.commit()
+    print("Ingesting stop_times with potential overrides (this might take a while)...")
+    sql = """
+        INSERT INTO gtfs.stop_times (trip_id, stop_id, stop_sequence, arrival_time, departure_time)
+        VALUES (%(trip_id)s, %(stop_id)s, %(stop_sequence)s, %(arrival_time)s, %(departure_time)s)
+        ON CONFLICT DO NOTHING;
+    """
+    ingest_with_overrides("stop_times.txt", sql)
     print("Stop times ingested.")
+
 
 def associate_stops_to_shapes():
     print("Building shape-to-stop associations using the longest available trips...")
@@ -268,23 +290,7 @@ def associate_stops_to_shapes():
             """)
             conn.commit()
     print("Shape-to-stop associations built successfully.")
-    # print("Building shape-to-stop associations...")
-    # with psycopg.connect(DATABASE_URL) as conn:
-    #     with conn.cursor() as cur:
-    #         cur.execute("""
-    #             INSERT INTO gtfs.shape_stops (shape_id, stop_id, stop_sequence)
-    #             SELECT DISTINCT ON (t.shape_id, st.stop_sequence)
-    #                 t.shape_id,
-    #                 st.stop_id,
-    #                 st.stop_sequence
-    #             FROM gtfs.trips t
-    #             JOIN gtfs.stop_times st ON t.trip_id = st.trip_id
-    #             WHERE t.shape_id IS NOT NULL
-    #             ORDER BY t.shape_id, st.stop_sequence, t.trip_id
-    #             ON CONFLICT DO NOTHING;
-    #         """)
-    #         conn.commit()
-    # print("Associations complete.")
+
 
 def ingest_calendar():
     path = os.path.join(GTFS_PATH, "calendar.txt")
@@ -310,6 +316,7 @@ def ingest_calendar():
                           row['start_date'], row['end_date']))
                 conn.commit()
 
+
 def ingest_calendar_dates():
     path = os.path.join(GTFS_PATH, "calendar_dates.txt")
     print("Ingesting calendar_dates.txt...")
@@ -325,6 +332,7 @@ def ingest_calendar_dates():
                             exception_type = EXCLUDED.exception_type
                     """, (row['service_id'], row['date'], row['exception_type']))
                 conn.commit()
+
 
 def generate_service_calendar():
     print("Generating the active service lookup table (service_by_date)...")
@@ -378,6 +386,7 @@ def generate_service_calendar():
             """)
             conn.commit()
     print("Service lookup table generated successfully.")
+
 
 if __name__ == "__main__":
     print(f"--- Starting GTFS Static Ingest at {datetime.now()} ---")

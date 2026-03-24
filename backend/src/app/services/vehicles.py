@@ -11,14 +11,16 @@ SELECT
   l.bearing,
   l.heading,
   l.observed_at,
+  l.last_stop_id,
   ST_X(l.geom) AS lon,
   ST_Y(l.geom) AS lat,
-
+  s.stop_name AS last_stop_name,
   p.prev_observed_at,
   p.prev_lon,
   p.prev_lat,
   p.prev_heading
 FROM bus.vehicle_latest l
+LEFT JOIN gtfs.stops s ON l.last_stop_id = s.stop_id
 LEFT JOIN LATERAL (
   SELECT
     o.observed_at AS prev_observed_at,
@@ -42,6 +44,7 @@ def get_latest_by_route_and_direction(route_id: str | None, direction: int | Non
 
     # pedropt10: Only show buses that reported in the last 20 minutes
     filters.append("l.observed_at > NOW() - INTERVAL '20 minutes'")
+    # filters.append("l.observed_at > NOW() - INTERVAL '300 minutes'")
 
     if route_id:
         filters.append("l.route_id = %(route_id)s")
