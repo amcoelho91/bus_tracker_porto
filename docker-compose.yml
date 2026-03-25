@@ -46,6 +46,7 @@ services:
       DATABASE_URL: ${DATABASE_URL}
       FIWARE_URL: ${FIWARE_URL}
       POLL_SECONDS: ${POLL_SECONDS}
+      PYTHONUNBUFFERED: "1"  # Ensure real-time logging
     depends_on:
       db:
         condition: service_healthy

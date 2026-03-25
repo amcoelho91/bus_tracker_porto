@@ -479,6 +479,8 @@ export function Map({ vehicles, shapeData0, shapeData1, selectedRoute, selectedD
                           hour: '2-digit', minute: '2-digit', second: '2-digit' 
                         })}</div>
                   <div><b>Trip:</b> {v.trip_id ?? "-"}</div>
+                  <div><b>🚏 Estimated last stop:</b></div>
+                  <div> {v.last_stop_name ?? v.last_stop_id ?? "(not available)"}</div>
                 </div>
               </Popup>
             </Marker>

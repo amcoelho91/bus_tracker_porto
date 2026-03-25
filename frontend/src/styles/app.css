@@ -1,3 +1,19 @@
+:root {
+  --bg-nav: #ffffff;
+  --bg-sub-header: #f9f9f9;
+  --border-color: #eeeeee;
+  --text-main: #000000;
+  --link-color: #0b5;
+}
+
+[data-theme="dark"] {
+  --bg-nav: #1a1a1a;
+  --bg-sub-header: #242424;
+  --border-color: #333333;
+  --text-main: #e0e0e0;
+  --link-color: #0b5;
+}
+
 html, body, #root {
   margin: 0;
   padding: 0;
@@ -9,6 +25,10 @@ html, body, #root {
   position: fixed; 
   left: 0;
   top: 0;
+
+  background-color: var(--bg-nav);
+  color: var(--text-main);
+  transition: background-color 0.2s, color 0.2s;
 }
 
 * {
@@ -17,7 +37,6 @@ html, body, #root {
 
 body {
   font-family: 'Inter', sans-serif;
-  /* overflow: hidden; */
 }
 
 .leaflet-popup-content-wrapper, 
@@ -33,12 +52,23 @@ button, select, input, textarea {
   font-family: 'Inter', sans-serif !important;
 }
 
-* {
-  box-sizing: border-box;
+.links button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1; /* Prevents text-based line height from expanding the button */
+}
+
+.links a {
+  display: flex;
+  align-items: center;
 }
 
 .leaflet-control-custom {
-  background: white;
+  /* background: white; */
+  background: var(--bg-nav);
+  color: var(--text-main);
+  border: 1px solid var(--border-color);
   width: 34px;
   height: 34px;
   line-height: 34px;

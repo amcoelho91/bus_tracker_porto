@@ -146,7 +146,9 @@ export function MapPage() {
         mostRecentLocation={mostRecentLocationTime}
         allRoutes={allRoutes}
       />
-      <div style={{ padding: "4px 12px", fontSize: 13, borderBottom: "1px solid #eee", background: "#f9f9f9" }}>
+      {/* <div style={{ padding: "4px 12px", fontSize: 13, borderBottom: "1px solid #eee", background: "#f9f9f9" }}> */}
+      <div style={{ padding: "4px 12px", fontSize: 13, borderBottom: "1px solid var(--border-color)", 
+                    background: "var(--bg-sub-header)", color: "var(--text-main)" }}>
         <b>{header}</b>
         {error && <span style={{ marginLeft: 10, color: "crimson" }}>{error}</span>}
       </div>

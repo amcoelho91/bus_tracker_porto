@@ -10,6 +10,8 @@ export type VehicleLatest = {
   observed_at: string;
   lon: number;
   lat: number;
+  last_stop_id: string | null;
+  last_stop_name: string | null;
 
   prev_observed_at: string | null;
   prev_lon: number | null;

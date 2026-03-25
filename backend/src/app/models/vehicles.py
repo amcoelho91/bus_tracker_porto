@@ -14,6 +14,8 @@ class VehicleLatest(BaseModel):
     observed_at: datetime
     lon: float
     lat: float
+    last_stop_id: str | None
+    last_stop_name: str | None
 
     # previous position (may be null if no history exists)
     prev_observed_at: datetime | None = None

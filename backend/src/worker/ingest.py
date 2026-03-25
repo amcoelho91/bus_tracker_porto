@@ -85,136 +85,89 @@ def main():
                         )
 
                         # # Insert history (dedupe if unique index exists)
-                        # cur.execute(
-                        #     """
-                        #     WITH shape_lookup AS (
-                        #         -- Get the shape for this route and direction
-                        #         SELECT shape_id, geom as shape_geom 
-                        #         FROM gtfs.shapes 
-                        #         WHERE route_id = %s AND direction_id = %s 
-                        #         LIMIT 1
-                        #     ),
-                        #     matched_stop AS (
-                        #         -- Perform the math we tested in the standalone script
-                        #         SELECT ss.stop_id
-                        #         FROM shape_lookup sl
-                        #         JOIN gtfs.shape_stops ss ON sl.shape_id = ss.shape_id
-                        #         JOIN gtfs.stops s ON ss.stop_id = s.stop_id
-                        #         WHERE 
-                        #             -- Distance check: must be within 150 meters
-                        #             ST_Distance(ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography, sl.shape_geom::geography) < 150
-                        #             -- Sequence check: stop must be 'behind' or 'at' the bus
-                        #             AND ST_LineLocatePoint(sl.shape_geom, ST_SetSRID(ST_MakePoint(s.stop_lon, s.stop_lat), 4326)) 
-                        #                 <= (ST_LineLocatePoint(sl.shape_geom, ST_SetSRID(ST_MakePoint(%s, %s), 4326)) + 0.002)
-                        #         ORDER BY ss.stop_sequence DESC
-                        #         LIMIT 1
-                        #     )
-                        #     INSERT INTO bus.vehicle_observation(
-                        #     vehicle_id, observed_at, route_id, direction, trip_id,
-                        #     speed, bearing, heading, current_trip_count, geom, last_stop_id
-                        #     )
-                        #     VALUES (
-                        #     %s, %s, %s, %s, %s,
-                        #     %s, %s, %s, %s,
-                        #     ST_SetSRID(ST_MakePoint(%s, %s), 4326),
-                        #     (SELECT stop_id FROM matched_stop)
-                        #     )
-                        #     ON CONFLICT DO NOTHING;
-                        #     """,
-                        #     (
-                        #         route_id, direction, # For shape lookup
-                        #         lon, lat,            # For Distance check
-                        #         lon, lat,            # For LineLocate check
-                        #         vehicle_id, observed_at, route_id, direction, trip_id,
-                        #         speed, bearing, heading, current_trip_count, lon, lat
-                        #     ),
-                        # )
                         cur.execute(
                             """
+                            WITH shape_lookup AS (
+                                -- Get the shape for this route and direction
+                                SELECT shape_id, geom as shape_geom 
+                                FROM gtfs.shapes 
+                                WHERE route_id = %s AND direction_id = %s 
+                                LIMIT 1
+                            ),
+                            matched_stop AS (
+                                -- Perform the math we tested in the standalone script
+                                SELECT ss.stop_id
+                                FROM shape_lookup sl
+                                JOIN gtfs.shape_stops ss ON sl.shape_id = ss.shape_id
+                                JOIN gtfs.stops s ON ss.stop_id = s.stop_id
+                                WHERE 
+                                    -- Distance check: must be within 150 meters
+                                    ST_Distance(ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography, sl.shape_geom::geography) < 150
+                                    -- Sequence check: stop must be 'behind' or 'at' the bus
+                                    AND ST_LineLocatePoint(sl.shape_geom, ST_SetSRID(ST_MakePoint(s.stop_lon, s.stop_lat), 4326)) 
+                                        <= (ST_LineLocatePoint(sl.shape_geom, ST_SetSRID(ST_MakePoint(%s, %s), 4326)) + 0.002)
+                                ORDER BY ss.stop_sequence DESC
+                                LIMIT 1
+                            )
                             INSERT INTO bus.vehicle_observation(
-                              vehicle_id, observed_at, route_id, direction, trip_id,
-                              speed, bearing, heading, current_trip_count, geom
+                            vehicle_id, observed_at, route_id, direction, trip_id,
+                            speed, bearing, heading, current_trip_count, geom, last_stop_id
                             )
                             VALUES (
-                              %s,%s,%s,%s,%s,
-                              %s,%s,%s,%s,
-                              ST_SetSRID(ST_MakePoint(%s,%s), 4326)
+                            %s, %s, %s, %s, %s,
+                            %s, %s, %s, %s,
+                            ST_SetSRID(ST_MakePoint(%s, %s), 4326),
+                            (SELECT stop_id FROM matched_stop)
                             )
-                            ON CONFLICT DO NOTHING
+                            ON CONFLICT DO NOTHING;
                             """,
                             (
+                                route_id, direction, # For shape lookup
+                                lon, lat,            # For Distance check
+                                lon, lat,            # For LineLocate check
                                 vehicle_id, observed_at, route_id, direction, trip_id,
-                                speed, bearing, heading, current_trip_count, lon, lat
+                                speed, bearing, heading, current_trip_count, 
+                                lon, lat
                             ),
                         )
+
                         inserted_obs += cur.rowcount  # 1 or 0
 
                         # Upsert latest (only if newer)
-                        # cur.execute(
-                        # """
-                        #     WITH shape_lookup AS (
-                        #         -- Get the shape for this route and direction
-                        #         SELECT shape_id, geom as shape_geom 
-                        #         FROM gtfs.shapes 
-                        #         WHERE route_id = %s AND direction_id = %s 
-                        #         LIMIT 1
-                        #     ),
-                        #     matched_stop AS (
-                        #         -- Perform the math we tested in the standalone script
-                        #         SELECT ss.stop_id
-                        #         FROM shape_lookup sl
-                        #         JOIN gtfs.shape_stops ss ON sl.shape_id = ss.shape_id
-                        #         JOIN gtfs.stops s ON ss.stop_id = s.stop_id
-                        #         WHERE 
-                        #             -- Distance check: must be within 150 meters
-                        #             ST_Distance(ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography, sl.shape_geom::geography) < 150
-                        #             -- Sequence check: stop must be 'behind' or 'at' the bus
-                        #             AND ST_LineLocatePoint(sl.shape_geom, ST_SetSRID(ST_MakePoint(s.stop_lon, s.stop_lat), 4326)) 
-                        #                 <= (ST_LineLocatePoint(sl.shape_geom, ST_SetSRID(ST_MakePoint(%s, %s), 4326)) + 0.002)
-                        #         ORDER BY ss.stop_sequence DESC
-                        #         LIMIT 1
-                        #     )
-                        #     INSERT INTO bus.vehicle_latest AS v(
-                        #       vehicle_id, observed_at, fleet_vehicle_id, route_id, direction, trip_id,
-                        #       speed, bearing, heading, geom, updated_at, last_stop_id
-                        #     )
-                        #     VALUES (
-                        #       %s,%s,%s,%s,%s,%s,
-                        #       %s,%s,%s,
-                        #       ST_SetSRID(ST_MakePoint(%s,%s), 4326),
-                        #       now(),
-                        #       (SELECT stop_id FROM matched_stop)
-                        #     )
-                        #     ON CONFLICT (vehicle_id) DO UPDATE
-                        #     SET observed_at = EXCLUDED.observed_at,
-                        #         fleet_vehicle_id = EXCLUDED.fleet_vehicle_id,
-                        #         route_id = EXCLUDED.route_id,
-                        #         direction = EXCLUDED.direction,
-                        #         trip_id = EXCLUDED.trip_id,
-                        #         speed = EXCLUDED.speed,
-                        #         bearing = EXCLUDED.bearing,
-                        #         heading = EXCLUDED.heading,
-                        #         geom = EXCLUDED.geom,
-                        #         updated_at = now(),
-                        #         last_stop_id = EXCLUDED.last_stop_id
-                        #     WHERE EXCLUDED.observed_at > v.observed_at
-                        #     """,
-                        #     (
-                        #         vehicle_id, observed_at, fleet_vehicle_id, route_id, direction, trip_id,
-                        #         speed, bearing, heading, lon, lat
-                        #     ),
-                        # )
                         cur.execute(
-                            """
+                        """
+                            WITH shape_lookup AS (
+                                -- Get the shape for this route and direction
+                                SELECT shape_id, geom as shape_geom 
+                                FROM gtfs.shapes 
+                                WHERE route_id = %s AND direction_id = %s 
+                                LIMIT 1
+                            ),
+                            matched_stop AS (
+                                -- Perform the math we tested in the standalone script
+                                SELECT ss.stop_id
+                                FROM shape_lookup sl
+                                JOIN gtfs.shape_stops ss ON sl.shape_id = ss.shape_id
+                                JOIN gtfs.stops s ON ss.stop_id = s.stop_id
+                                WHERE 
+                                    -- Distance check: must be within 150 meters
+                                    ST_Distance(ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography, sl.shape_geom::geography) < 150
+                                    -- Sequence check: stop must be 'behind' or 'at' the bus
+                                    AND ST_LineLocatePoint(sl.shape_geom, ST_SetSRID(ST_MakePoint(s.stop_lon, s.stop_lat), 4326)) 
+                                        <= (ST_LineLocatePoint(sl.shape_geom, ST_SetSRID(ST_MakePoint(%s, %s), 4326)) + 0.002)
+                                ORDER BY ss.stop_sequence DESC
+                                LIMIT 1
+                            )
                             INSERT INTO bus.vehicle_latest AS v(
                               vehicle_id, observed_at, fleet_vehicle_id, route_id, direction, trip_id,
-                              speed, bearing, heading, geom, updated_at
+                              speed, bearing, heading, geom, updated_at, last_stop_id
                             )
                             VALUES (
                               %s,%s,%s,%s,%s,%s,
                               %s,%s,%s,
                               ST_SetSRID(ST_MakePoint(%s,%s), 4326),
-                              now()
+                              now(),
+                              (SELECT stop_id FROM matched_stop)
                             )
                             ON CONFLICT (vehicle_id) DO UPDATE
                             SET observed_at = EXCLUDED.observed_at,
@@ -226,15 +179,20 @@ def main():
                                 bearing = EXCLUDED.bearing,
                                 heading = EXCLUDED.heading,
                                 geom = EXCLUDED.geom,
-                                updated_at = now()
+                                updated_at = now(),
+                                last_stop_id = EXCLUDED.last_stop_id
                             WHERE EXCLUDED.observed_at > v.observed_at
                             """,
                             (
+                                route_id, direction,
+                                lon, lat,
+                                lon, lat,
                                 vehicle_id, observed_at, fleet_vehicle_id, route_id, direction, trip_id,
-                                speed, bearing, heading, lon, lat
+                                speed, bearing, heading, 
+                                lon, lat
                             ),
                         )
-                        updated_latest += cur.rowcount  # 1 if updated/inserted, 0 if older
+                        updated_latest += cur.rowcount   # 1 if updated/inserted, 0 if older
 
                 conn.commit()
 
