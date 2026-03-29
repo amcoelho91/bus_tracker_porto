@@ -2,6 +2,7 @@ import os
 import csv
 import psycopg
 from datetime import datetime
+import math
 
 DATABASE_URL = os.environ["DATABASE_URL"]
 GTFS_PATH = os.path.join(os.getcwd(), "gtfs")
@@ -40,8 +41,8 @@ def ensure_gtfs_tables():
                 CREATE TABLE IF NOT EXISTS gtfs.stops (
                     stop_id TEXT PRIMARY KEY,
                     stop_name TEXT,
-                    stop_lat DOUBLE PRECISION,
-                    stop_lon DOUBLE PRECISION,
+                    stop_lat DOUBLE PRECISION NOT NULL,
+                    stop_lon DOUBLE PRECISION NOT NULL,
                     zone_id TEXT,
                     stop_url TEXT
                 );
@@ -162,26 +163,26 @@ def process_shapes_file(file_path, cur):
     with open(file_path, mode='r', encoding='utf-8-sig') as f:
         reader = csv.DictReader(f)
         for row in reader:
-            sid = row['shape_id']
-            if sid not in shapes:
-                parts = sid.split('_')
+            shape_id = row['shape_id']
+            if shape_id not in shapes:
+                parts = shape_id.split('_')
                 route_id = parts[0]
                 direction_id = int(parts[1]) if len(parts) > 1 else 0
                 
-                shapes[sid] = {
+                shapes[shape_id] = {
                     'route_id': route_id,
                     'direction_id': direction_id,
                     'pts': []
                 }
             
-            shapes[sid]['pts'].append({
+            shapes[shape_id]['pts'].append({
                 'lat': float(row['shape_pt_lat']),
                 'lon': float(row['shape_pt_lon']),
                 'seq': int(row['shape_pt_sequence'])
             })
 
     print(f"Building geometries for {len(shapes)} shapes from {os.path.basename(file_path)}...")
-    for sid, data in shapes.items():
+    for shape_id, data in shapes.items():
         pts = data['pts']
         pts.sort(key=lambda x: x['seq'])
         
@@ -196,7 +197,7 @@ def process_shapes_file(file_path, cur):
                 geom = EXCLUDED.geom,
                 route_id = EXCLUDED.route_id,
                 direction_id = EXCLUDED.direction_id;
-        """, (sid, data['route_id'], data['direction_id'], linestring_wkt))
+        """, (shape_id, data['route_id'], data['direction_id'], linestring_wkt))
 
 
 def ingest_shapes():
@@ -288,9 +289,112 @@ def associate_stops_to_shapes():
                 JOIN gtfs.stop_times st ON lt.trip_id = st.trip_id
                 ON CONFLICT DO NOTHING;
             """)
+
+            calculate_cumulative_shape_distances(cur)
+            
             conn.commit()
     print("Shape-to-stop associations built successfully.")
 
+def haversine_distance(lat1, lon1, lat2, lon2):
+    """Calculate the great circle distance between two points in meters."""
+    R = 6371000  # Earth radius in meters
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    dphi, dlambda = math.radians(lat2-lat1), math.radians(lon2-lon1)
+    a = math.sin(dphi/2)**2 + math.cos(phi1)*math.cos(phi2)*math.sin(dlambda/2)**2
+    return 2 * R * math.atan2(math.sqrt(a), math.sqrt(1-a))
+
+def calculate_cumulative_shape_distances(cur):
+    print("Calculating shape_dist_traveled for all routes...")
+
+    # 1. Get all shapes and their points in order
+    # Note: If your geom is a LineString, it's easier to pull points via PostGIS functions
+    cur.execute("""
+        SELECT 
+            shape_id, 
+            (dp).path[1] as pt_seq,
+            ST_X((dp).geom) as lon,
+            ST_Y((dp).geom) as lat
+        FROM (
+            SELECT shape_id, ST_DumpPoints(geom) as dp 
+            FROM gtfs.shapes
+        ) AS dumped
+        ORDER BY shape_id, pt_seq
+    """)
+    
+    from collections import defaultdict
+    shape_data = defaultdict(list)
+    for shape_id, seq, lon, lat in cur.fetchall():
+        shape_data[shape_id].append({'lat': lat, 'lon': lon, 'dist': 0.0})
+
+    # 2. Pre-calculate cumulative distance along each shape
+    for shape_id, pts in shape_data.items():
+        total_dist = 0.0
+        for i in range(1, len(pts)):
+            p1, p2 = pts[i-1], pts[i]
+            # Haversine or use PostGIS ST_Distance(geog, geog) for accuracy
+            dist = haversine_distance(p1['lat'], p1['lon'], p2['lat'], p2['lon'])
+            total_dist += dist
+            pts[i]['dist'] = total_dist
+
+    # 3. Fetch stops associated with these shapes
+    cur.execute("""
+        SELECT ss.shape_id, ss.stop_id, ss.stop_sequence, s.stop_lat, s.stop_lon
+        FROM gtfs.shape_stops ss
+        JOIN gtfs.stops s ON ss.stop_id = s.stop_id
+        ORDER BY ss.shape_id, ss.stop_sequence ASC
+    """)
+    
+    # Keep track of the current shape to handle the "list reduction" per route
+    current_shape_id = None
+    pts = []
+
+    # 4. Map stops to the nearest cumulative distance on the shape
+    # We use a cursor.fetchall() or a separate list to avoid iterator conflicts
+    stops_to_process = cur.fetchall() 
+
+    for shape_id, stop_id, stop_seq, s_lat, s_lon in stops_to_process:
+        # Reset the points list only when we switch to a new shape
+        if shape_id != current_shape_id:
+            current_shape_id = shape_id
+            # Get a fresh copy of the points for this specific shape
+            pts = list(shape_data.get(shape_id, []))
+            
+        if not pts:
+            continue
+        
+        # Find the index of the closest point in the remaining list
+        # enumerate allows us to find the position so we can slice correctly
+        best_idx, best_pt = min(
+            enumerate(pts), 
+            key=lambda x: haversine_distance(s_lat, s_lon, x[1]['lat'], x[1]['lon'])
+        )
+        
+        # Update the database using the absolute distance pre-calculated in Step 2
+        cur.execute("""
+            UPDATE gtfs.shape_stops 
+            SET shape_dist_traveled = %s 
+            WHERE shape_id = %s AND stop_sequence = %s
+        """, (best_pt['dist'], shape_id, stop_seq))
+
+        # Slice the list. All points before this stop are now "in the past" and removed from the search
+        pts = pts[best_idx:]
+
+    # # 4. Map stops to the nearest cumulative distance on the shape
+    # # Crucially: We only look forward in the points list to avoid circular ambiguity
+    # for shape_id, stop_id, stop_seq, s_lat, s_lon in cur.fetchall():
+    #     pts = shape_data.get(shape_id)
+    #     if not pts: continue
+        
+    #     # Find the point on the shape closest to the stop
+    #     # For circular routes, sequence ensures we pick the 'start' point for Seq 1
+    #     # and the 'end' point for the final sequence.
+    #     best_pt = min(pts, key=lambda p: haversine_distance(s_lat, s_lon, p['lat'], p['lon']))
+        
+    #     cur.execute("""
+    #         UPDATE gtfs.shape_stops 
+    #         SET shape_dist_traveled = %s 
+    #         WHERE shape_id = %s AND stop_sequence = %s
+    #     """, (best_pt['dist'], shape_id, stop_seq))
 
 def ingest_calendar():
     path = os.path.join(GTFS_PATH, "calendar.txt")
@@ -387,17 +491,30 @@ def generate_service_calendar():
             conn.commit()
     print("Service lookup table generated successfully.")
 
+def is_gtfs_loaded(cur):
+    """Check if we actually need to run the heavy lifting."""
+    cur.execute("SELECT EXISTS (SELECT 1 FROM gtfs.shape_stops LIMIT 1);")
+    return cur.fetchone()[0]
+
+def main():
+    with psycopg.connect(DATABASE_URL) as conn:
+        with conn.cursor() as cur:
+            if not is_gtfs_loaded(cur):
+                print("GTFS Database empty. Running full ingestion...")
+                print(f"--- Starting GTFS Static Ingest at {datetime.now()} ---")
+                ensure_gtfs_tables()
+                ingest_routes()
+                ingest_shapes()
+                ingest_stops()
+                ingest_trips()
+                ingest_stop_times()
+                ingest_calendar()
+                ingest_calendar_dates()
+                generate_service_calendar()
+                associate_stops_to_shapes()
+                print("--- Done ---")
+            else:
+                print("GTFS database detected!")
 
 if __name__ == "__main__":
-    print(f"--- Starting GTFS Static Ingest at {datetime.now()} ---")
-    ensure_gtfs_tables()
-    ingest_routes()
-    ingest_shapes()
-    ingest_stops()
-    ingest_trips()
-    ingest_stop_times()
-    ingest_calendar()
-    ingest_calendar_dates()
-    generate_service_calendar()
-    associate_stops_to_shapes()
-    print("--- Done ---")
+    main()

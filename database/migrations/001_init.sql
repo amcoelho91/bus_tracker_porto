@@ -32,14 +32,15 @@ CREATE TABLE IF NOT EXISTS bus.vehicle_observation (
   direction            int,
   trip_id              text,
 
-  speed                numeric,
-  bearing              int,
   heading              int,
   current_trip_count   int,
 
   geom                 geometry(Point, 4326) NOT NULL,
 
-  ingested_at          timestamptz NOT NULL DEFAULT now()
+  ingested_at          timestamptz NOT NULL DEFAULT now(),
+  
+  last_stop_id          text,
+  cur_stop_id           text
 );
 
 -- Real-time serving layer: one row per vehicle (upserted)
@@ -52,12 +53,13 @@ CREATE TABLE IF NOT EXISTS bus.vehicle_latest (
   direction            int,
   trip_id              text,
 
-  speed                numeric,
-  bearing              int,
   heading              int,
 
   geom                 geometry(Point, 4326) NOT NULL,
-  updated_at           timestamptz NOT NULL DEFAULT now()
+  updated_at           timestamptz NOT NULL DEFAULT now(),
+
+  last_stop_id          text,
+  cur_stop_id           text
 );
 
 -- (Optional but useful) Keep track of worker runs for debugging/monitoring
@@ -76,7 +78,8 @@ CREATE TABLE IF NOT EXISTS gtfs.routes (
     route_id TEXT PRIMARY KEY,
     route_short_name TEXT,
     route_long_name TEXT,
-    route_url TEXT
+    route_color TEXT,
+    route_text_color TEXT
 );
 
 CREATE TABLE IF NOT EXISTS gtfs.shapes (
@@ -119,7 +122,28 @@ CREATE TABLE IF NOT EXISTS gtfs.shape_stops (
     shape_id TEXT,
     stop_id TEXT REFERENCES gtfs.stops(stop_id),
     stop_sequence INTEGER,
+    shape_dist_traveled DOUBLE PRECISION,
     PRIMARY KEY (shape_id, stop_sequence)
+);
+
+CREATE TABLE IF NOT EXISTS gtfs.calendar (
+    service_id TEXT PRIMARY KEY,
+    monday INTEGER,
+    tuesday INTEGER,
+    wednesday INTEGER,
+    thursday INTEGER,
+    friday INTEGER,
+    saturday INTEGER,
+    sunday INTEGER,
+    start_date TEXT,
+    end_date TEXT
+);
+
+CREATE TABLE IF NOT EXISTS gtfs.calendar_dates (
+    service_id TEXT,
+    date TEXT,
+    exception_type INTEGER,
+    PRIMARY KEY (service_id, date)
 );
 
 -- Create indexes for performance during lookups

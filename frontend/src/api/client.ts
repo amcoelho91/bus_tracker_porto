@@ -4,14 +4,14 @@ export type VehicleLatest = {
   route_id: string | null;
   direction: number | null;
   trip_id: string | null;
-  speed: number | null;
-  bearing: number | null;
   heading: number | null;
   observed_at: string;
   lon: number;
   lat: number;
   last_stop_id: string | null;
   last_stop_name: string | null;
+  cur_stop_id: string | null;
+  route_long_name: string | null;
 
   prev_observed_at: string | null;
   prev_lon: number | null;

@@ -6,8 +6,8 @@ router = APIRouter()
 
 @router.get("/stops")
 async def get_stops_by_route(
-    route_id: str = Query(..., example="704"), 
-    direction_id: int = Query(..., example=0)
+    route_id: str = Query(..., examples=["704"]), 
+    direction_id: int = Query(..., examples=[0])
 ):
     """
     Fetches all stops for a specific route and direction, 

@@ -50,6 +50,38 @@ export const getRouteColors = (routeId: string | null, direction: number | strin
   return { bgColor, textColor, hasShadow };
 };
 
+/**
+ * Parses route_long_name into a specific direction's destination.
+ * Rule: "{Dest 0} - {Dest 1}"  |  (via ...) tags are applied to both. 
+ */
+export function getDirectionDestination(longName: string | null, direction: number | string | null): string {
+  if (!longName) return "-";
+  const d = (direction === 1 || direction === "1") ? 1 : 0;
+  if (direction === null) return longName;
+
+  // 1. Extract all "(via ...)" instances regardless of where they are
+  const viaRegex = /\(via [^)]+\)/gi;
+  const viaMatches = longName.match(viaRegex) || [];
+  const viaString = viaMatches.join(" ");
+
+  // 2. Remove the "via" parts from the original string to clean up the destinations
+  let cleanLongName = longName.replace(viaRegex, "").trim();
+
+  // 3. Split by the dash
+  const parts = cleanLongName.split(" - ").map(p => p.trim());
+  
+  // 4. Determine which part we want
+  let destination = parts[d] || parts[0];
+
+  // // 5. If we found a "via", append it back to our specific destination
+  // if (viaString) {
+  //   destination = `${destination} ${viaString}`;
+  // }
+
+  // Clean up any double spaces or trailing dashes
+  return destination.replace(/\s\s+/g, ' ').trim();
+}
+
 // added shapeData0 prop to receive route shapes from MapPage
 export function Map({ vehicles, shapeData0, shapeData1, selectedRoute, selectedDirection, stops }: Props) {
   // Colors for primary shape (Direction 0 or currently selected)
@@ -408,56 +440,19 @@ export function Map({ vehicles, shapeData0, shapeData1, selectedRoute, selectedD
                   <div style={{ fontSize: 13, minWidth: "100px", whiteSpace: "nowrap" }}>
                     <div>⬜ PREVIOUS</div>
                     <div>⬜ LOCATION</div><br></br>
-                    <div style={{ 
+                    <div><span style={{ 
                       backgroundColor: routeMainBgColor, color: routeMainTextColor, 
                       padding: "2px 6px", borderRadius: 4, minWidth: 20,
                       display: "inline-block", textAlign: "center"
-                    }}><b>{v.route_id ?? "-"}</b></div>
+                    }}><b>{v.route_id ?? "-"}</b></span> <b>{getDirectionDestination(v.route_long_name, v.direction)}</b></div>
+                    <br></br>
                     <div>🚌 {label}</div>
                     <div>⌚ {v.prev_observed_at ? new Date(v.prev_observed_at).toLocaleTimeString('pt-PT', { 
                       hour: '2-digit', minute: '2-digit', second: '2-digit' 
                     }) : "-"}</div>
-                    {/* <div><b>Trip:</b> {v.trip_id ?? "-"}</div> */}
                   </div>
                 </Popup>
               </Marker>
-              // <>
-              //   {/* <CircleMarker
-              //     center={prevPos}
-              //     radius={7}
-              //     pathOptions={{ color: "red" }}
-              //   > */}
-              //   <CircleMarker
-              //     center={prevPos}
-              //     radius={5}
-              //     pane="vehicle-previous-location-pane"
-              //     pathOptions={{ 
-              //       fillColor: bgColor, fillOpacity: 1, color: "#000000", weight: 1 
-              //     }}
-              //   >
-              //     <Popup pane="popup-pane">
-              //       <div style={{ fontSize: 13 }}>
-              //         <div><b>Location: PREVIOUS</b></div>
-              //         <div><b>Route:</b> {v.route_id ?? "-"}</div>
-              //         <div><b>Vehicle:</b> {label}</div>
-              //         <div><b>Direction:</b> {v.direction ?? "-"}</div>
-              //         <div><b>Observed:</b> {v.prev_observed_at ? new Date(v.prev_observed_at).toLocaleTimeString('pt-PT', { 
-              //           hour: '2-digit', 
-              //           minute: '2-digit', 
-              //           second: '2-digit' 
-              //         }) : "-"}</div>
-              //         {/* <div><b>Trip:</b> {v.trip_id ?? "-"}</div> */}
-              //         {/* <div><b>Lat,Lon:</b> {prevPos[0]}, {prevPos[1]}</div> */}
-              //       </div>
-              //     </Popup>
-              //   </CircleMarker>
-              //   {/* </CircleMarker> */}
-
-              //   {/*<Polyline
-              //     positions={[prevPos, curPos]}
-              //     pathOptions={{ color: "gray", weight: 2, dashArray: '5, 5' }} 
-              //   /> */}
-              // </>
             ) : null}
 
             <Marker 
@@ -467,20 +462,31 @@ export function Map({ vehicles, shapeData0, shapeData1, selectedRoute, selectedD
             >
               <Popup pane="popup-pane" minWidth={100}>
                 <div style={{ fontSize: 13, minWidth: "100px", whiteSpace: "nowrap" }}>
-                  <div><b>{isOld ? "🔴 DELAYED LOCATION" : "🟢 CURRENT LOCATION"}</b></div><br></br>
-                  <div style={{ 
+                  <div><b>{isOld ? "🔴 LAGGING " : "🟢 LIVE "}</b>({new Date(v.observed_at).toLocaleTimeString('pt-PT', { 
+                          hour: '2-digit', minute: '2-digit', second: '2-digit' 
+                        })})</div><br></br>
+                  <div><span style={{ 
                     backgroundColor: routeMainBgColor, color: routeMainTextColor, 
                     padding: "2px 6px", borderRadius: 4, minWidth: 20,
                     display: "inline-block", textAlign: "center"
-                  }}><b>{v.route_id ?? "-"}</b></div>
-                  <div>⬅  {v.direction ?? "-"}</div>
+                  }}><b>{v.route_id ?? "-"}</b></span> <b>{getDirectionDestination(v.route_long_name, v.direction)}</b></div>
+                  <br></br>
                   <div>🚌 {label}</div>
-                  <div><b>⌚</b> {new Date(v.observed_at).toLocaleTimeString('pt-PT', { 
-                          hour: '2-digit', minute: '2-digit', second: '2-digit' 
-                        })}</div>
-                  <div><b>Trip:</b> {v.trip_id ?? "-"}</div>
-                  <div><b>🚏 Estimated last stop:</b></div>
-                  <div> {v.last_stop_name ?? v.last_stop_id ?? "(not available)"}</div>
+                  <div></div>
+                  {/* <div><b>Trip:</b> {v.trip_id ?? "-"}</div> */}
+                  <br></br>
+                  {/* If current stop is available, display it. Else, display the estimated last stop. */}
+                  {v.cur_stop_id ? (
+                    <>
+                      <div><b>🚏 Current stop:</b></div>
+                      <div>{v.last_stop_name ?? v.cur_stop_id ?? "(not available)"}</div>
+                    </>
+                  ) : (
+                    <>
+                      <div><b>🚏 Last stop:</b></div>
+                      <div>{v.last_stop_name ?? v.last_stop_id ?? "(not available)"}</div>
+                    </>
+                  )}
                 </div>
               </Popup>
             </Marker>

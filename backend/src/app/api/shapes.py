@@ -7,8 +7,8 @@ router = APIRouter()
 
 @router.get("/shapes")
 async def get_route_shape(
-    route_id: str = Query(..., example="704"), 
-    direction_id: int = Query(..., example=1)
+    route_id: str = Query(..., examples=["704"]), 
+    direction_id: int = Query(..., examples=[1])
 ):
     query = """
         SELECT ST_AsGeoJSON(s.geom), r.route_color 

@@ -7,20 +7,21 @@ SELECT
   l.route_id,
   l.direction,
   l.trip_id,
-  l.speed,
-  l.bearing,
   l.heading,
   l.observed_at,
   l.last_stop_id,
+  l.cur_stop_id,
   ST_X(l.geom) AS lon,
   ST_Y(l.geom) AS lat,
   s.stop_name AS last_stop_name,
+  r.route_long_name,
   p.prev_observed_at,
   p.prev_lon,
   p.prev_lat,
   p.prev_heading
 FROM bus.vehicle_latest l
 LEFT JOIN gtfs.stops s ON l.last_stop_id = s.stop_id
+LEFT JOIN gtfs.routes r ON l.route_id = r.route_id
 LEFT JOIN LATERAL (
   SELECT
     o.observed_at AS prev_observed_at,

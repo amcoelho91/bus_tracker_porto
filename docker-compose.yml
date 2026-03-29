@@ -20,6 +20,21 @@ services:
       timeout: 5s
       retries: 20
 
+  gtfs_setup:
+    profiles: ["setup"]
+    build:
+      context: ./backend
+    container_name: bus_gtfs_ingest
+    env_file: .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    command: ["python", "-m", "worker.gtfs_ingest"]
+
   backend_api:
     build:
       context: ./backend
@@ -30,6 +45,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      gtfs_setup:
+        condition: service_completed_successfully
     volumes:
       - ./backend:/app
     ports:
@@ -41,6 +58,8 @@ services:
     build:
       context: ./backend
     container_name: bus_worker
+    volumes:
+      - ./backend:/app
     env_file: .env
     environment:
       DATABASE_URL: ${DATABASE_URL}
@@ -50,6 +69,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      gtfs_setup:
+        condition: service_completed_successfully
     command: ["python", "-m", "worker.ingest"]
 
   frontend:
