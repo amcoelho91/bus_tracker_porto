@@ -2,7 +2,6 @@ from app.db.session import get_conn
 
 SQL_LATEST_WITH_PREV_BASE = """
 SELECT
-  l.fleet_vehicle_id,
   l.vehicle_id,
   l.route_id,
   l.direction,
@@ -36,7 +35,7 @@ LEFT JOIN LATERAL (
 ) p ON TRUE
 """
 
-SQL_ORDER = " ORDER BY l.fleet_vehicle_id NULLS LAST;"
+SQL_ORDER = " ORDER BY l.vehicle_id NULLS LAST;"
 
 def get_latest_by_route_and_direction(route_id: str | None, direction: int | None):
     route_id = route_id.strip() if route_id else None
@@ -66,9 +65,9 @@ def get_latest_by_route_and_direction(route_id: str | None, direction: int | Non
             cur.execute(sql, params)
             return cur.fetchall()
 
-def get_latest_by_fleet_id(fleet_vehicle_id: str):
-    sql = SQL_LATEST_WITH_PREV_BASE + " WHERE l.fleet_vehicle_id = %(fleet_vehicle_id)s LIMIT 1;"
+def get_latest_by_fleet_id(vehicle_id: str):
+    sql = SQL_LATEST_WITH_PREV_BASE + " WHERE l.vehicle_id = %(vehicle_id)s LIMIT 1;"
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute(sql, {"fleet_vehicle_id": fleet_vehicle_id})
+            cur.execute(sql, {"vehicle_id": vehicle_id})
             return cur.fetchone()

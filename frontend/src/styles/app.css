@@ -82,6 +82,40 @@ button, select, input, textarea {
     color: black;
 }
 
+/* 1. Target the images directly for maximum filter strength */
+[data-theme='dark'] .leaflet-tile {
+    filter: invert(100%) hue-rotate(180deg) brightness(85%) contrast(95%) !important;
+}
+
+/* 2. Target the pane as a fallback and to ensure seamless zooming */
+[data-theme='dark'] .leaflet-tile-pane {
+    filter: none; /* Reset the pane filter so we don't double-invert */
+    background: #1a1a1a;
+}
+
+/* 3. prevent white flashes and handle the background */
+.leaflet-container {
+    background: #1a1a1a !important;
+}
+
+/* 4. Fix for Zoom Controls & Attribution */
+[data-theme='dark'] .leaflet-control-zoom-in,
+[data-theme='dark'] .leaflet-control-zoom-out,
+[data-theme='dark'] .leaflet-bar a {
+    background-color: var(--bg-nav) !important;
+    color: var(--text-main) !important;
+    border-color: var(--border-color) !important;
+}
+
+/* 5. Attribution cleanup */
+[data-theme='dark'] .leaflet-control-attribution {
+    background-color: rgba(26, 26, 26, 0.8) !important;
+    color: #888 !important;
+}
+[data-theme='dark'] .leaflet-control-attribution a {
+    color: var(--link-color) !important;
+}
+
 .custom-heading-marker {
   background: none !important;
   border: none !important;

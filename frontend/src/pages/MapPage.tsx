@@ -6,7 +6,7 @@ import { VehicleSelector } from "../components/VehicleSelector";
 
 export function MapPage() {
   const [route, setRoute] = useState<string>("704");
-  const [direction, setDirection] = useState<number | null>(1); // default like your example
+  const [direction, setDirection] = useState<number | null>(0);
   const [vehicles, setVehicles] = useState<VehicleLatest[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string | undefined>(undefined);
@@ -95,12 +95,12 @@ export function MapPage() {
 
   const header = useMemo(() => {
     const n = vehicles.length;
-    // pedropt10: Added Ida and Volta labels
+    
     let directionLabel;
       if (direction === 0) {
-        directionLabel = '0 ("Ida")';
+        directionLabel = '0 (Inbound)';
       } else if (direction === 1) {
-        directionLabel = '1 ("Volta")';
+        directionLabel = '1 (Outbound)';
       } else {
         directionLabel = "(all)";
       }
@@ -146,50 +146,11 @@ export function MapPage() {
         mostRecentLocation={mostRecentLocationTime}
         allRoutes={allRoutes}
       />
-      {/* <div style={{ padding: "4px 12px", fontSize: 13, borderBottom: "1px solid #eee", background: "#f9f9f9" }}> */}
       <div style={{ padding: "4px 12px", fontSize: 13, borderBottom: "1px solid var(--border-color)", 
                     background: "var(--bg-sub-header)", color: "var(--text-main)" }}>
         <b>{header}</b>
         {error && <span style={{ marginLeft: 10, color: "crimson" }}>{error}</span>}
       </div>
-      {/* <div style={{ padding: "10px", position: "relative", zIndex: 1000, background: "white" }}>
-        <input 
-          type="text" 
-          placeholder="Search Route (e.g. 704)..."
-          value={searchTerm}
-          onFocus={() => setIsListOpen(true)}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          style={{ width: "100%", padding: "8px" }}
-        />
-        
-        {isListOpen && filteredRoutes.length > 0 && (
-          <div style={{ 
-            position: "absolute", top: "100%", left: 10, right: 10, 
-            maxHeight: "250px", overflowY: "auto", background: "white", 
-            border: "1px solid #ccc", boxShadow: "0 4px 6px rgba(0,0,0,0.1)" 
-          }}>
-            {filteredRoutes.map((r) => {
-              const { bgColor, textColor } = getRouteColors(r.route_id, 1);
-              return (
-                <div 
-                  key={r.route_id}
-                  onClick={() => {
-                    setRoute(r.route_id);
-                    setSearchTerm(r.route_short_name);
-                    setIsListOpen(false);
-                  }}
-                  style={{ padding: "8px", cursor: "pointer", borderBottom: "1px solid #eee" }}
-                >
-                  <span style={{ backgroundColor: bgColor, color: textColor, padding: "2px 6px", display: "inline-block" }}>
-                    <b>{r.route_short_name}</b>
-                  </span>
-                  &nbsp; {r.route_long_name}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div> */}
       <div style={{ flex: 1, position: "relative" }}>
         <Map vehicles={vehicles} shapeData0={shapeData0} shapeData1={shapeData1} stops={stops} selectedRoute={route} selectedDirection={direction} />
       </div>

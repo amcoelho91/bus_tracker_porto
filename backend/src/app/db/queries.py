@@ -1,6 +1,5 @@
 SQL_LATEST_BY_ROUTE = """
 SELECT
-  v.fleet_vehicle_id,
   v.vehicle_id,
   v.route_id,
   v.direction,
@@ -22,7 +21,6 @@ ORDER BY v.fleet_vehicle_id NULLS LAST;
 
 SQL_LATEST_BY_FLEET_ID = """
 SELECT
-  v.fleet_vehicle_id,
   v.vehicle_id,
   v.route_id,
   v.direction,
@@ -38,6 +36,6 @@ SELECT
 FROM bus.vehicle_latest v
 LEFT JOIN gtfs.stops s ON s.stop_id = v.last_stop_id
 LEFT JOIN gtfs.routes r ON r.route_id = v.route_id
-WHERE fleet_vehicle_id = %(fleet_vehicle_id)s
+WHERE v.vehicle_id = %(fleet_vehicle_id)s
 LIMIT 1;
 """

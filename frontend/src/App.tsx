@@ -3,6 +3,8 @@ import React, { useEffect, useState } from "react";
 import { BrowserRouter, Link, Route, Routes } from "react-router-dom";
 import { MapPage } from "./pages/MapPage";
 import { StatsPage } from "./pages/StatsPage";
+import { HistoryPage } from "./pages/HistoryPage";
+import { TimetablesPage } from "./pages/TimetablesPage";
 
 export function App() {
   const [isDark, setIsDark] = useState(() => 
@@ -25,7 +27,14 @@ export function App() {
           </Link>
           <Link style={styles.link} to="/stats">
             Stats
-          </Link> 
+          </Link>
+          <Link style={styles.link} to="/history">
+            History
+          </Link>
+          <Link style={styles.link} to="/timetables">
+            Timetables
+          </Link>
+
           <button 
             onClick={() => setIsDark(!isDark)}
             style={styles.toggleBtn}
@@ -38,6 +47,8 @@ export function App() {
       <Routes>
         <Route path="/" element={<MapPage />} />
         <Route path="/stats" element={<StatsPage />} />
+        <Route path="/history" element={<HistoryPage />} />
+        <Route path="/timetables" element={<TimetablesPage />} />
       </Routes>
     </BrowserRouter>
   );

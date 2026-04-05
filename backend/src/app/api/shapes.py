@@ -8,20 +8,21 @@ router = APIRouter()
 @router.get("/shapes")
 async def get_route_shape(
     route_id: str = Query(..., examples=["704"]), 
-    direction_id: int = Query(..., examples=[1])
+    direction_id: int = Query(..., examples=[0, 1]),
+    variant_id: int = 0
 ):
     query = """
         SELECT ST_AsGeoJSON(s.geom), r.route_color 
         FROM gtfs.shapes s
         LEFT JOIN gtfs.routes r ON s.route_id = r.route_id
-        WHERE s.route_id = %s AND s.direction_id = %s
+        WHERE s.route_id = %s AND s.direction_id = %s AND s.variant_id = %s
         LIMIT 1;
     """
     
     try:
         with psycopg.connect(settings.database_url) as conn:
             with conn.cursor() as cur:
-                cur.execute(query, (route_id, direction_id))
+                cur.execute(query, (route_id, direction_id, variant_id))
                 row = cur.fetchone()
                 
                 if not row:

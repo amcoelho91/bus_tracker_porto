@@ -2,7 +2,6 @@ from pydantic import BaseModel
 from datetime import datetime
 
 class VehicleLatest(BaseModel):
-    fleet_vehicle_id: str | None
     vehicle_id: str
     route_id: str | None
     direction: int | None

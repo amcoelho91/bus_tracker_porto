@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Query
 import psycopg
 import os
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from typing import List
 from pydantic import BaseModel
 
@@ -17,10 +18,27 @@ class StopArrival(BaseModel):
 async def get_stop_arrivals(stop_id: str, route_short_name: str = Query(None)):
     stop_id = stop_id.upper()
 
-    now = datetime.now()    # Get current time in HH:MM:SS format for GTFS comparison
-    current_date = now.strftime("%Y-%m-%d")
-    current_time = now.strftime("%H:%M:%S")
-    two_hours_later = (now + timedelta(hours=2)).strftime("%H:%M:%S")
+    tz = ZoneInfo("Europe/Lisbon")      # Force the local Porto timezone
+    now = datetime.now(tz)    # Get current time in HH:MM:SS format for GTFS comparison
+
+    future_limit_hours = 2  # How many hours into the future we want to look for arrivals
+
+    if now.hour < 2 and now.hour < 24 - future_limit_hours:
+        # If it's between midnight and 2 AM, we need to check the previous day's service
+        # The "M" nightline services run every day with the same schedule, so this assumption is ok.
+        current_date_str = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+        current_time_str = f"{now.hour + 24}:{now.strftime('%M:%S')}"
+        two_hours_later_str = f"{now.hour + 24 + future_limit_hours}:{now.strftime('%M:%S')}"
+
+    elif now.hour >= 24 - future_limit_hours:
+        current_date_str = now.strftime("%Y-%m-%d")
+        current_time_str = f"{now.hour}:{now.strftime('%M:%S')}"
+        two_hours_later_str = f"{now.hour + future_limit_hours}:{now.strftime('%M:%S')}"
+        
+    else:
+        current_date_str = now.strftime("%Y-%m-%d")
+        current_time_str = now.strftime("%H:%M:%S")
+        two_hours_later_str = (now + timedelta(hours=future_limit_hours)).strftime("%H:%M:%S")
 
     try:
         with psycopg.connect(DATABASE_URL) as conn:
@@ -52,7 +70,8 @@ async def get_stop_arrivals(stop_id: str, route_short_name: str = Query(None)):
                     LIMIT 10;
                 """
                 
-                cur.execute(query, (stop_id, current_date, route_short_name, route_short_name, current_time, two_hours_later))
+                cur.execute(query, (stop_id, current_date_str, route_short_name, route_short_name, 
+                                    current_time_str, two_hours_later_str))
                 rows = cur.fetchall()
 
                 return [

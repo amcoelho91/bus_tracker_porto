@@ -9,22 +9,10 @@ CREATE EXTENSION IF NOT EXISTS postgis;
 CREATE SCHEMA IF NOT EXISTS bus;
 CREATE SCHEMA IF NOT EXISTS gtfs;
 
--- Static-ish vehicle info (one row per NGSI entity id)
-CREATE TABLE IF NOT EXISTS bus.vehicle (
-  vehicle_id           text PRIMARY KEY,      -- NGSI entity id (e.g. "urn:ngsi-ld:Vehicle:...")
-  fleet_vehicle_id     text,                  -- e.g. "3527"
-  name                 text,
-  data_provider        text,
-  vehicle_type         text,                  -- e.g. "bus"
-  source               text,
-  created_at           timestamptz NOT NULL DEFAULT now(),
-  updated_at           timestamptz NOT NULL DEFAULT now()
-);
-
 -- Full history: one row per (vehicle, observation time)
 CREATE TABLE IF NOT EXISTS bus.vehicle_observation (
   obs_id               bigserial PRIMARY KEY,
-  vehicle_id           text NOT NULL REFERENCES bus.vehicle(vehicle_id) ON DELETE CASCADE,
+  vehicle_id           text NOT NULL,
   observed_at          timestamptz NOT NULL,
 
   -- extracted from annotations.value entries like "stcp:route:504"
@@ -48,7 +36,6 @@ CREATE TABLE IF NOT EXISTS bus.vehicle_latest (
   vehicle_id           text PRIMARY KEY REFERENCES bus.vehicle(vehicle_id) ON DELETE CASCADE,
   observed_at          timestamptz NOT NULL,
 
-  fleet_vehicle_id     text,
   route_id             text,
   direction            int,
   trip_id              text,

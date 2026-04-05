@@ -14,7 +14,7 @@ type Props = {
 };
 
 export const getRouteColors = (routeId: string | null, direction: number | string | null) => {
-  // If direction is 0 OR null, use index 0. 
+  // Direction normalization: Treat "1" as 1, but default to 0 if it's null or unrecognized
   const d = (direction === 1 || direction === "1") ? 1 : 0;
   const isNightRoute = !routeId || routeId.toUpperCase().includes("M");
   const r = routeId ? parseInt(routeId) : null;
@@ -52,7 +52,7 @@ export const getRouteColors = (routeId: string | null, direction: number | strin
 
 /**
  * Parses route_long_name into a specific direction's destination.
- * Rule: "{Dest 0} - {Dest 1}"  |  (via ...) tags are applied to both. 
+ * Rule: "{Dest 1} - {Dest 2}"  |  (via ...) tags are applied to both. 
  */
 export function getDirectionDestination(longName: string | null, direction: number | string | null): string {
   if (!longName) return "-";
@@ -329,7 +329,7 @@ export function Map({ vehicles, shapeData0, shapeData1, selectedRoute, selectedD
 
       {/* Render the Vehicles' markers with route info*/}
       {vehicles.map((v) => {
-        const label = v.fleet_vehicle_id ?? v.vehicle_id;
+        const v_label = v.vehicle_id;
         const hasPrev =
           v.prev_lat !== null &&
           v.prev_lon !== null &&
@@ -446,7 +446,7 @@ export function Map({ vehicles, shapeData0, shapeData1, selectedRoute, selectedD
                       display: "inline-block", textAlign: "center"
                     }}><b>{v.route_id ?? "-"}</b></span> <b>{getDirectionDestination(v.route_long_name, v.direction)}</b></div>
                     <br></br>
-                    <div>🚌 {label}</div>
+                    <div>🚌 {v_label}</div>
                     <div>⌚ {v.prev_observed_at ? new Date(v.prev_observed_at).toLocaleTimeString('pt-PT', { 
                       hour: '2-digit', minute: '2-digit', second: '2-digit' 
                     }) : "-"}</div>
@@ -471,7 +471,7 @@ export function Map({ vehicles, shapeData0, shapeData1, selectedRoute, selectedD
                     display: "inline-block", textAlign: "center"
                   }}><b>{v.route_id ?? "-"}</b></span> <b>{getDirectionDestination(v.route_long_name, v.direction)}</b></div>
                   <br></br>
-                  <div>🚌 {label}</div>
+                  <div>🚌 {v_label}</div>
                   <div></div>
                   {/* <div><b>Trip:</b> {v.trip_id ?? "-"}</div> */}
                   <br></br>

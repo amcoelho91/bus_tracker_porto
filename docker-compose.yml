@@ -14,6 +14,8 @@ services:
       # run init SQL on first boot (optional but handy)
       - ./database/migrations/001_init.sql:/docker-entrypoint-initdb.d/001_init.sql:ro
       - ./database/migrations/002_indexes.sql:/docker-entrypoint-initdb.d/002_indexes.sql:ro
+      - ./database/migrations/003_fleetnr_cleanup.sql:/docker-entrypoint-initdb.d/003_fleetnr_cleanup.sql:ro
+      - ./database/migrations/004_duplicate_cleanup.sql:/docker-entrypoint-initdb.d/004_duplicate_cleanup.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s

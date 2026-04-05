@@ -1,6 +1,5 @@
 export type VehicleLatest = {
-  fleet_vehicle_id: string | null;
-  vehicle_id: string;
+  vehicle_id: string | null;
   route_id: string | null;
   direction: number | null;
   trip_id: string | null;
@@ -121,4 +120,67 @@ export async function fetchPlannedArrivals(stopId: string): Promise<StopPlannedA
     console.error("Error fetching planned arrivals:", err);
     return [];
   }
+}
+
+export async function fetchHistory(params: {
+  mode: "trip" | "route";
+  route_id: string;
+  date: string;
+  trip_id?: string;
+  start_time?: string;
+  end_time?: string;
+}): Promise<VehicleLatest[]> 
+{
+  const query = new URLSearchParams(params as any).toString();
+  const res = await fetch(`${API_BASE}/api/history?${query}`);
+  if (!res.ok) throw new Error("Failed to fetch history");
+  return res.json();
+}
+
+export async function fetchAvailableTrips(route_id: string, date: string): Promise<string[]> {
+  const url = `${API_BASE}/api/history/trips-list?route_id=${route_id}&date=${date}`;
+  console.log("Fetching trips from:", url); // Debug the actual URL
+  const res = await fetch(url);
+  
+  if (!res.ok) {
+    console.error("Trip fetch failed with status:", res.status);
+    throw new Error("Failed to fetch trip list");
+  }
+  return res.json();
+}
+
+export type ScheduledTimetable = {
+    trip_id: string;
+    arrival_time: string;
+    stop_id: string;
+    stop_name: string;
+    stop_sequence: number;
+}
+
+export type ReferenceStop = {
+    stop_id: string;
+    stop_name: string;
+    stop_sequence: number;
+};
+
+export type TimetableResponse = {
+    reference_stops: ReferenceStop[];
+    trips: ScheduledTimetable[];
+};
+
+export async function fetchDailyTimetable(
+  date: string, 
+  route_id: string, 
+  direction_id: number
+): Promise<TimetableResponse> {
+  const url = `${API_BASE}/api/schedules/daily?date=${date}&route_id=${route_id}&direction_id=${direction_id}`;
+  console.log("Fetching timetable from:", url);
+  const res = await fetch(url);
+  
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    console.error("Timetable fetch failed:", res.status, errorData.detail);
+    throw new Error(errorData.detail || "Failed to fetch timetable");
+  }
+  return res.json();
 }

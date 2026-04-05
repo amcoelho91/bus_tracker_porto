@@ -7,13 +7,13 @@ router = APIRouter(tags=["vehicles"])
 @router.get("/latest", response_model=list[VehicleLatest])
 def latest(
     route: str | None = Query(default=None, description="Route id, e.g. 704"),
-    direction: int | None = Query(default=None, description="Direction (sentido), typically 0 or 1"),
+    direction: int | None = Query(default=None, description="Direction id, 0 or 1"),
 ):
     return get_latest_by_route_and_direction(route, direction)
 
-@router.get("/vehicle/{fleet_vehicle_id}", response_model=VehicleLatest)
-def vehicle_latest(fleet_vehicle_id: str):
-    row = get_latest_by_fleet_id(fleet_vehicle_id)
+@router.get("/vehicle/{vehicle_id}", response_model=VehicleLatest)
+def vehicle_latest(vehicle_id: str):
+    row = get_latest_by_fleet_id(vehicle_id)
     if not row:
         raise HTTPException(status_code=404, detail="Vehicle not found")
     return row

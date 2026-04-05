@@ -27,6 +27,10 @@ export function VehicleSelector({
 }: Props) {
   const [searchTerm, setSearchTerm] = useState("");
   const [isListOpen, setIsListOpen] = useState(false);
+  
+  const selectedRouteObj = useMemo(() => 
+      allRoutes.find(r => r.route_id === route), 
+    [route, allRoutes]);
 
   // Filter routes based on what the user is typing
   const filteredRoutes = useMemo(() => {
@@ -37,12 +41,55 @@ export function VehicleSelector({
     );
   }, [searchTerm, allRoutes]);
 
+  // Get colors for the currently selected route (or defaults if none)
+  const { bgColor, textColor } = useMemo(() => {
+      if (!selectedRouteObj) return { bgColor: 'transparent', textColor: 'inherit' };
+      return getRouteColors(selectedRouteObj.route_id, 0);
+    }, [selectedRouteObj]);
+
   return (
     <div style={styles.bar}>
       <div style={styles.left}>
         <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
           <span style={{ fontSize: 14 }}>Route:&nbsp;</span>
-          <input
+          <div style={{ 
+            position: "relative",  display: "flex", alignItems: "center",
+            background: "white", border: "1px solid var(--border-color)", borderRadius: 4,
+            padding: "2px 4px",  minWidth: 120, cursor: "text"
+          }} 
+          onClick={() => setIsListOpen(true)}>
+            
+            {/* 1. Selected route box (Visible when list is closed and route is selected) */}
+            {!isListOpen && selectedRouteObj && (
+              <span style={{ 
+                backgroundColor: bgColor, color: textColor, padding: "2px 6px", 
+                borderRadius: 4, fontSize: 14, fontWeight: "bold", marginRight: 4                
+              }}>
+                {selectedRouteObj.route_short_name}
+              </span>
+            )}
+
+            {/* 2. THE SEARCH INPUT */}
+            <input
+              value={isListOpen ? searchTerm : (selectedRouteObj ? "" : route)}
+              onFocus={() => {
+                setIsListOpen(true);
+                setSearchTerm("");
+              }}
+              onBlur={() => setTimeout(() => setIsListOpen(false), 200)}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder={!selectedRouteObj ? "Search..." : ""}
+              style={{ 
+                border: "none", 
+                outline: "none", 
+                width: isListOpen ? "100%" : 60, // Shrink when showing the pill
+                height: 24,
+                fontSize: 13 
+              }} 
+            />
+          </div>
+
+          {/* <input
             value={isListOpen ? searchTerm : route}
             onFocus={() => {
               setIsListOpen(true);
@@ -52,7 +99,7 @@ export function VehicleSelector({
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Search..."
             style={{ ...styles.input, width: 120 }} 
-          />
+          /> */}
 
           {isListOpen && (
             <div style={styles.dropdown}>
@@ -111,8 +158,8 @@ export function VehicleSelector({
             style={styles.select}
           >
             <option value="all">All</option>
-            <option value="0">0</option>
-            <option value="1">1</option>
+            <option value="0">0 (Inbound)</option>
+            <option value="1">1 (Outbound)</option>
           </select>
         </label>
 
