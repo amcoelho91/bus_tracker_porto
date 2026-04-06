@@ -42,18 +42,19 @@
 --     r.route_short_name, 
 --     t.trip_headsign,
 --     st.arrival_time,
---     t.service_id
--- FROM gtfs.stop_times st
--- JOIN gtfs.trips t ON st.trip_id = t.trip_id
--- JOIN gtfs.routes r ON t.route_id = r.route_id
--- JOIN gtfs.service_by_date sbd ON t.service_id = sbd.service_id
--- WHERE st.stop_id = 'PRFL1' 
--- AND sbd.date = '2026-04-01'
--- AND r.route_short_name = '200'
--- AND st.arrival_time::INTERVAL >= '22:00:00'::INTERVAL 
--- AND st.arrival_time::INTERVAL <= '23:59:00'::INTERVAL
--- ORDER BY st.arrival_time::INTERVAL ASC
--- LIMIT 10;
+--     t.service_id^
+SELECT *
+FROM gtfs.stop_times st
+JOIN gtfs.trips t ON st.trip_id = t.trip_id
+JOIN gtfs.routes r ON t.route_id = r.route_id
+JOIN gtfs.service_by_date sbd ON t.service_id = sbd.service_id
+-- WHERE st.stop_id = 'BRCV' 
+WHERE sbd.date = '2026-04-06'
+AND r.route_short_name = '704'
+AND st.arrival_time::INTERVAL >= '22:00:00'::INTERVAL 
+AND st.arrival_time::INTERVAL <= '23:59:00'::INTERVAL
+ORDER BY st.arrival_time::INTERVAL ASC
+LIMIT 10;
 
 -- SELECT direction_id, COUNT(*) 
 -- FROM gtfs.shapes 

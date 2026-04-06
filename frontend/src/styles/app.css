@@ -1,17 +1,25 @@
 :root {
   --bg-nav: #ffffff;
   --bg-sub-header: #f9f9f9;
+  --bg-map-popup: #f9f9f9;
+  --bg-input-select: #f9f9f9;
+  --bg-button: #a5fbb6;
   --border-color: #eeeeee;
   --text-main: #000000;
+  --text-secondary: #666666;
   --link-color: #0b5;
 }
 
 [data-theme="dark"] {
   --bg-nav: #1a1a1a;
   --bg-sub-header: #242424;
-  --border-color: #333333;
+  --bg-map-popup: #444444;
+  --bg-input-select: #444444;
+  --bg-button: #168b72;
+  --border-color: #5b5b5b;
   --text-main: #e0e0e0;
-  --link-color: #0b5;
+  --text-secondary: #b0b0b0;
+  --link-color: #5FDDC2;
 }
 
 html, body, #root {
@@ -45,6 +53,12 @@ body {
 .leaflet-marker-icon.custom-bus-marker,
 .custom-bus-marker {
   font-family: 'Inter', sans-serif !important; width: auto !important;
+}
+
+.leaflet-popup-content-wrapper, 
+.leaflet-popup-tip {
+  background-color: var(--bg-map-popup) !important;
+  color: var(--text-main) !important;
 }
 
 /* Ensure Form Elements (Selects/Inputs) match */

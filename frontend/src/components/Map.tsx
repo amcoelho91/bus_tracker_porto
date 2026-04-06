@@ -43,6 +43,8 @@ export const getRouteColors = (routeId: string | null, direction: number | strin
   } else if (r !== null && r >= 900 && r <= 999) {
     bgColor = d === 0 ? '#F28118' : '#B05601'; 
     if (d === 0) hasShadow = true; 
+  } else if (routeId.toUpperCase().includes("Z")) {
+    bgColor = d === 0 ? '#268FFF' : '#06579E'; 
   } else {
     bgColor = d === 0 ? '#555555' : '#000000'; 
   }
@@ -135,14 +137,36 @@ export function Map({ vehicles, shapeData0, shapeData1, selectedRoute, selectedD
     return (
       <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "8px", fontSize: "12px" }}>
         <thead>
-          <tr style={{ borderBottom: "1px solid #eee", textAlign: "left", color: "#666" }}>
+          <tr style={{ borderBottom: "1px solid var(--border-color)", textAlign: "left", color: "var(--text-secondary)" }}>
             <th style={{ padding: "4px", textAlign: "center" }}>Route</th>
             <th style={{ padding: "4px", textAlign: "left" }}>Destination</th>
             <th style={{ padding: "4px", textAlign: "center" }}>🕒</th>
           </tr>
         </thead>
         <tbody>
-          {arrivals.map((a, idx) => (
+          {arrivals.map((a, idx) => {
+            const { bgColor, textColor } = getRouteColors(a.route_short_name, 0);
+          return (
+            <tr key={idx} style={{ borderBottom: "1px solid var(--border-color)" }}>
+              <td style={{ padding: "6px 4px", textAlign: "center" }}>
+                <span style={{
+                  backgroundColor: bgColor, color: textColor, display: "inline-block",
+                  padding: "2px 6px", borderRadius: "4px", minWidth: "30px",
+                  fontWeight: "bold", fontSize: "11px", textAlign: "center"
+                }}>
+                  {a.route_short_name}
+                </span>
+              </td>
+              <td style={{ padding: "4px", textAlign: "left", maxWidth: "140px", 
+                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" 
+              }}>
+                {a.trip_headsign}
+              </td>
+              <td style={{ padding: "4px", textAlign: "center", maxWidth: "8px" }}>{getMinutesUntil(a.arrival_time)}</td>
+            </tr>
+          );
+          })}
+          {/* {arrivals.map((a, idx) => (
             <tr key={idx} style={{ borderBottom: "1px solid #f9f9f9" }}>
               <td style={{ padding: "4px", textAlign: "center", maxWidth: "8px", fontWeight: "bold" }}>{a.route_short_name}</td>
               <td style={{ padding: "4px", textAlign: "left", maxWidth: "132px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -150,7 +174,7 @@ export function Map({ vehicles, shapeData0, shapeData1, selectedRoute, selectedD
               </td>
               <td style={{ padding: "4px", textAlign: "center", maxWidth: "8px" }}>{getMinutesUntil(a.arrival_time)}</td>
             </tr>
-          ))}
+          ))} */}
         </tbody>
       </table>
     );
@@ -303,10 +327,10 @@ export function Map({ vehicles, shapeData0, shapeData1, selectedRoute, selectedD
               <div style={{ marginBottom: "5px" }}>
                 <strong>{stop.stop_name}</strong>
               </div>
-              <div style={{ color: "#666", fontSize: "12px", marginBottom: "8px" }}>
+              <div style={{ color: "var(--text-secondary)", fontSize: "12px", marginBottom: "8px" }}>
                 ID: {stop.stop_id}
               </div>
-              <div style={{ borderTop: "1px solid #eee", marginBottom: "8px" }}>
+              <div style={{ borderTop: "1px solid var(--border-color)", marginBottom: "8px" }}>
                 <StopArrivals stopId={stop.stop_id} />
               </div>
               {stop.stop_url && (
@@ -315,8 +339,8 @@ export function Map({ vehicles, shapeData0, shapeData1, selectedRoute, selectedD
                   target="_blank" 
                   rel="noopener noreferrer"
                   style={{ 
-                    color: "#187EC2", textDecoration: "none", fontWeight: "bold",
-                    display: "block", borderTop: "1px solid #eee", paddingTop: "5px"
+                    color: "var(--link-color)", textDecoration: "none", fontWeight: "bold",
+                    display: "block", borderTop: "1px solid var(--border-color)", paddingTop: "5px"
                   }}
                 >
                   View Timetables →

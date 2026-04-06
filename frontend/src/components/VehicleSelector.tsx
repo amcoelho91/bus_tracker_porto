@@ -54,7 +54,7 @@ export function VehicleSelector({
           <span style={{ fontSize: 14 }}>Route:&nbsp;</span>
           <div style={{ 
             position: "relative",  display: "flex", alignItems: "center",
-            background: "white", border: "1px solid var(--border-color)", borderRadius: 4,
+            background: "var(--bg-input-select)", border: "1px solid var(--border-color)", borderRadius: 4,
             padding: "2px 4px",  minWidth: 120, cursor: "text"
           }} 
           onClick={() => setIsListOpen(true)}>
@@ -80,11 +80,9 @@ export function VehicleSelector({
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder={!selectedRouteObj ? "Search..." : ""}
               style={{ 
-                border: "none", 
-                outline: "none", 
+                border: "none", outline: "none", 
                 width: isListOpen ? "100%" : 60, // Shrink when showing the pill
-                height: 24,
-                fontSize: 13 
+                height: 24, fontSize: 13, background: "var(--bg-input-select)"
               }} 
             />
           </div>
@@ -198,41 +196,26 @@ const styles: Record<string, React.CSSProperties> = {
   right: { display: "flex", alignItems: "center" },
   label: { display: "flex", alignItems: "center", fontSize: 14 },
   input: { padding: "6px 8px", border: "1px solid var(--border-color)", borderRadius: 6, width: 100, 
-    background: "var(--bg-nav)", color: "var(--text-main)" },
+    background: "var(--bg-input-select)", color: "var(--text-main)" },
   select: { padding: "6px 8px", border: "1px solid var(--border-color)", borderRadius: 6, 
-    background: "var(--bg-nav)", color: "var(--text-main)" },
+    background: "var(--bg-input-select)", color: "var(--text-main)" },
   button: {
-    padding: "6px 10px",
-    borderRadius: 6,
-    border: "1px solid var(--border-color)",
-    background: "var(--bg-sub-header)",
-    color: "var(--text-main)",
-    cursor: "pointer"
+    padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border-color)",
+    background: "var(--bg-button)", color: "var(--text-main)", cursor: "pointer"
   },
   muted: { color: "var(--text-main)", opacity: 0.7, fontSize: 12 },
 
   dropdown: {
-    position: "absolute",
-    top: "100%",
+    position: "absolute", top: "100%", 
     left: 45, // Adjusted to align with the start of the input
-    width: 300,
-    maxHeight: 300,
-    overflowY: "auto",
-    backgroundColor: "var(--bg-nav)",
-    border: "1px solid var(--border-color)",
-    borderRadius: 4,
-    boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-    zIndex: 2000,
-    marginTop: 4
+    width: 300, maxHeight: 300, overflowY: "auto",
+    backgroundColor: "var(--bg-nav)", border: "1px solid var(--border-color)", borderRadius: 4,
+    boxShadow: "0 4px 12px rgba(0,0,0,0.15)", zIndex: 2000, marginTop: 4
   },
   dropdownItem: {
-    padding: "8px 12px",
-    cursor: "pointer",
-    fontSize: 13,
-    borderBottom: "1px solid var(--border-color)",
-    color: "var(--text-main)",
-    whiteSpace: "nowrap",
-    overflow: "hidden",
-    textOverflow: "ellipsis"
+    padding: "8px 12px", cursor: "pointer",
+    fontSize: 13, borderBottom: "1px solid var(--border-color)",
+    color: "var(--text-main)", backgroundColor: "var(--bg-sub-header)",
+    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
   }
 };
