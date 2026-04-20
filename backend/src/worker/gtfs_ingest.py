@@ -189,6 +189,9 @@ def format_gtfs_name(name: str, is_route: bool = False) -> str:
         # Rule E: Fix the ". )" edge case -> replace with ".)"
         # We do this after the other rules to clean up any spaces we accidentally added
         name = name.replace(". )", ".)")
+    else:
+        # Rule for trip_headsigns (and potentially stop names): remove leading asterisk
+        name = name.removeprefix("*")
 
     # 3. Define exceptions (lower case)
     exceptions = {"da", "de", "do", "das", "dos"}
@@ -236,6 +239,9 @@ def format_stop_name(name: str) -> str:
 
 def format_route_name(name: str) -> str:
     return format_gtfs_name(name, is_route=True)
+
+def format_trip_name(name: str) -> str:
+    return format_gtfs_name(name, is_route=False)
 
 
 def ingest_routes():
@@ -355,6 +361,7 @@ def update_stop_name_case():
     except Exception as e:
         print(f"Error updating database: {e}")
 
+
 def update_route_name_case():
     print("Formatting route name cases...")
     try:
@@ -381,6 +388,37 @@ def update_route_name_case():
                     print(f"Success! Updated {len(update_data)} route names.")
                 else:
                     print("No changes needed. All routes already match the format.")
+
+    except Exception as e:
+        print(f"Error updating database: {e}")
+
+
+def update_tripheadsign_name_case():
+    print("Formatting Trip Headsign name cases...")
+    try:
+        with psycopg.connect(DATABASE_URL) as conn:
+            with conn.cursor() as cur:
+                # 1. Fetch all routes
+                cur.execute("SELECT trip_id, trip_headsign FROM gtfs.trips")
+                rows = cur.fetchall()
+                
+                # 2. Prepare the update data
+                update_data = []
+                for trip_id, original_name in rows:
+                    formatted_name = format_trip_name(original_name)
+                    if formatted_name != original_name:
+                        update_data.append((formatted_name, trip_id))
+
+                # 3. Batch Update
+                if update_data:
+                    cur.executemany(
+                        "UPDATE gtfs.trips SET trip_headsign = %s WHERE trip_id = %s",
+                        update_data
+                    )
+                    conn.commit()
+                    print(f"Success! Updated {len(update_data)} trip headsigns.")
+                else:
+                    print("No changes needed. All trip headsigns already match the format.")
 
     except Exception as e:
         print(f"Error updating database: {e}")
@@ -426,6 +464,8 @@ def ingest_trips():
             conn.commit()
 
     print("Shift and trip numbers updated.")
+
+    update_tripheadsign_name_case()
 
 
 def ingest_stop_times():
@@ -724,6 +764,7 @@ def delete_gtfs_tables():
 
 
 def main():
+ 
     # Run gtfs_update.py first to check for new files and download if needed
     from .gtfs_update import main as gtfs_update_main
     if gtfs_update_main():

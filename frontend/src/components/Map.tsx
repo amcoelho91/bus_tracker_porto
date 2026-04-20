@@ -53,9 +53,13 @@ export const getRouteColors = (routeId: string | null, direction: number | strin
 };
 
 /**
- * Parses route_long_name into a specific direction's destination.
- * Rule: "{Dest 1} - {Dest 2}"  |  (via ...) tags are applied to both. 
+ * (Helper to be used if trip_headsign null)
+ * Obtains the destination to be displayed in the popup of a vehicle location marker
+ *     Parses route_long_name into a specific direction's destination.
+ *     Rule: "{A} - {B}", as in A > B, as in direction 0 is from A to B, thus destination is {B}
+ *            (via ...) tags are applied to both. 
  */
+
 export function getDirectionDestination(longName: string | null, direction: number | string | null): string {
   if (!longName) return "-";
   const d = (direction === 1 || direction === "1") ? 1 : 0;
@@ -64,17 +68,25 @@ export function getDirectionDestination(longName: string | null, direction: numb
   // 1. Extract all "(via ...)" instances regardless of where they are
   const viaRegex = /\(via [^)]+\)/gi;
   const viaMatches = longName.match(viaRegex) || [];
-  const viaString = viaMatches.join(" ");
+  // const viaString = viaMatches.join(" ");
+  const isCircular = longName.toUpperCase().includes("CIRCULAR")
 
   // 2. Remove the "via" parts from the original string to clean up the destinations
   let cleanLongName = longName.replace(viaRegex, "").trim();
 
-  // 3. Split by the dash
-  const parts = cleanLongName.split(" - ").map(p => p.trim());
-  
-  // 4. Determine which part we want
-  let destination = parts[d] || parts[0];
 
+  let destination: string; 
+
+  if (isCircular) {
+    // 3A. Circular lines: Use long name as is
+    destination = cleanLongName;
+  } else {
+    // 3B. Non-circular lines: Split by the dash
+    const parts = cleanLongName.split(" - ").map(p => p.trim());
+    // Determine which part we want - direction 0 -> part 1, direction 1 -> part 0
+    destination = parts[Math.abs(d-1)] || parts[1];
+  }
+  
   // // 5. If we found a "via", append it back to our specific destination
   // if (viaString) {
   //   destination = `${destination} ${viaString}`;
@@ -84,7 +96,6 @@ export function getDirectionDestination(longName: string | null, direction: numb
   return destination.replace(/\s\s+/g, ' ').trim();
 }
 
-// added shapeData0 prop to receive route shapes from MapPage
 export function Map({ vehicles, shapeData0, shapeData1, selectedRoute, selectedDirection, stops }: Props) {
   // Colors for primary shape (Direction 0 or currently selected)
   const primaryColors = useMemo(() => 
@@ -186,7 +197,7 @@ export function Map({ vehicles, shapeData0, shapeData1, selectedRoute, selectedD
       className: 'custom-heading-marker',
           html: `
             <div style="
-              width: 12px; height: 12px; background-color: black; /* This acts as the border */
+              width: 12px; height: 12px; background-color: var(--bus-marker-border); /* This acts as the border */
               clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
               display: flex; align-items: center; justify-content: center;
               transform: rotate(${heading}deg); transform-origin: center;
@@ -376,33 +387,46 @@ export function Map({ vehicles, shapeData0, shapeData1, selectedRoute, selectedD
         // Override colors if observation is older than 2 minutes, otherwise use route colors
         const bgColor = isOld ? '#a3a3a3' : routeBg;
         const textColor = isOld ? '#FFFFFF' : routeText;
+        // ------------------------------------------------------------------------------------
+        const showHeadsign = true; // REPLACE BY FLAG THAT IS TRUE IF ALL ROUTES ARE SELECTED 
+        // ------------------------------------------------------------------------------------
 
         // Current Bus Marker
         const cur_heading = v.heading ?? 0;
         let curBusMarkerRotation = 0;
         let flexDir: "column" | "row" | "column-reverse" | "row-reverse" = "column";
         let arrowRotation = 0;
-        let marginStyle = "0px"; // Default margin for arrow
+        let arrowMarginStyle = "0px"; // Default margin for arrow
+        let headsignMarginStyle = "0px";
+        let headsignPosition = "top: 100%; left: 50%;"
 
         // Quadrant logic:
         if (cur_heading >= 315 || cur_heading < 45) { // North (NW to NE)
           curBusMarkerRotation = cur_heading;
           flexDir = "column";         // Arrow on TOP
           arrowRotation = 0;
+          headsignMarginStyle = "1px 0 0 0";
+          headsignPosition = "top: 100%; left: 50%;" // Positions it exactly below the flex container's bottom edge
         } else if (cur_heading >= 45 && cur_heading < 135) { // East (NE to SE)
           curBusMarkerRotation = cur_heading - 90;
           flexDir = "row-reverse";    // Arrow on RIGHT
           arrowRotation = 90;
-          marginStyle = "0 0 0 -1px"; // Pulls it 3px closer from the Right
+          arrowMarginStyle = "0 0 0 -1px"; // Pulls it 3px closer from the Right
+          headsignMarginStyle = "1px 0 0 -1px";
+          headsignPosition = "top: 98%; left: 38%;"
         } else if (cur_heading >= 135 && cur_heading < 225) { // South (SE to SW)
           curBusMarkerRotation = cur_heading - 180;
           flexDir = "column-reverse"; // Arrow on BOTTOM
           arrowRotation = 180;
+          headsignMarginStyle = "1px 0 0 0";
+          headsignPosition = "bottom: 100%; left: 50%;"
         } else { // West (SW to NW)
           curBusMarkerRotation = cur_heading - 270;
           flexDir = "row";            // Arrow on LEFT
           arrowRotation = 270;
-          marginStyle = "0 -1px 0 0"; // Pulls it 3px closer from the Left
+          arrowMarginStyle = "0 -1px 0 0"; // Pulls it 3px closer from the Left
+          headsignMarginStyle = "1px -1px 0 0"; 
+          headsignPosition = "top: 98%; left: 62%;"
         }
 
         // Create a custom divIcon for the bus marker
@@ -428,7 +452,7 @@ export function Map({ vehicles, shapeData0, shapeData1, selectedRoute, selectedD
                 border-right: 6px solid transparent;
                 border-bottom: 9px solid ${bgColor};
                 transform: rotate(${arrowRotation}deg);
-                margin: ${marginStyle};
+                margin: ${arrowMarginStyle};
                 filter: drop-shadow(0 0 0.3px black) drop-shadow(0 0 0.3px black);
                 transform-origin: center;
               "></div>
@@ -438,7 +462,7 @@ export function Map({ vehicles, shapeData0, shapeData1, selectedRoute, selectedD
                 color: ${textColor};
                 padding: 2px 5px;
                 border-radius: 3px;
-                border: 1px solid black;
+                border: 1px solid var(--bus-marker-border);
                 font-weight: bold;
                 font-size: 11px;
                 z-index: 2;
@@ -446,6 +470,27 @@ export function Map({ vehicles, shapeData0, shapeData1, selectedRoute, selectedD
               ">
                 ${v.route_id ?? '??'}
               </div>
+
+              ${showHeadsign ? `
+                <div style="
+                  position: absolute;
+                  ${headsignPosition}
+                  transform: translateX(-50%); /* Centers it horizontally relative to the route box */
+                  margin-top: ${headsignMarginStyle};
+                  
+                  background-color: ${bgColor};
+                  color: ${textColor};
+                  padding: 1px 4px;
+                  border-radius: 3px;
+                  border: 0.5px solid var(--text-main);
+                  font-size: 8px;
+                  white-space: nowrap;
+                  font-family: inherit;
+                  z-index: 1;
+                ">
+                  ${v.trip_headsign ?? ''}
+                </div>
+              ` : ''}
             </div>
           `,
           iconSize: [30, 30],
@@ -468,7 +513,12 @@ export function Map({ vehicles, shapeData0, shapeData1, selectedRoute, selectedD
                       backgroundColor: routeMainBgColor, color: routeMainTextColor, 
                       padding: "2px 6px", borderRadius: 4, minWidth: 20,
                       display: "inline-block", textAlign: "center"
-                    }}><b>{v.route_id ?? "-"}</b></span> <b>{getDirectionDestination(v.route_long_name, v.direction)}</b></div>
+                    }}><b>{v.route_id ?? "-"}</b></span> <b>{v.trip_headsign ?? getDirectionDestination(v.route_long_name, v.direction)}</b></div>
+                    {/* <div><span style={{ 
+                      backgroundColor: routeMainBgColor, color: routeMainTextColor, 
+                      padding: "2px 6px", borderRadius: 4, minWidth: 20,
+                      display: "inline-block", textAlign: "center"
+                    }}><b>{v.route_id ?? "-"}</b></span> <b>{getDirectionDestination(v.route_long_name, v.direction)}</b></div> */}
                     <br></br>
                     <div>🚌 {v_label}</div>
                     <div>⌚ {v.prev_observed_at ? new Date(v.prev_observed_at).toLocaleTimeString('pt-PT', { 
@@ -493,7 +543,7 @@ export function Map({ vehicles, shapeData0, shapeData1, selectedRoute, selectedD
                     backgroundColor: routeMainBgColor, color: routeMainTextColor, 
                     padding: "2px 6px", borderRadius: 4, minWidth: 20,
                     display: "inline-block", textAlign: "center"
-                  }}><b>{v.route_id ?? "-"}</b></span> <b>{getDirectionDestination(v.route_long_name, v.direction)}</b></div>
+                  }}><b>{v.route_id ?? "-"}</b></span> <b>{v.trip_headsign ?? getDirectionDestination(v.route_long_name, v.direction)}</b></div>
                   <br></br>
                   <div>🚌 {v_label}</div>
                   <div></div>
@@ -511,6 +561,7 @@ export function Map({ vehicles, shapeData0, shapeData1, selectedRoute, selectedD
                       <div>{v.last_stop_name ?? v.last_stop_id ?? "(not available)"}</div>
                     </>
                   )}
+                  {/* <div><b>Destination:</b>{v.trip_headsign ?? "(not available)"}</div> */}
                 </div>
               </Popup>
             </Marker>

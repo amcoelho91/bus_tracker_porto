@@ -14,6 +14,7 @@ SELECT
   ST_Y(l.geom) AS lat,
   s.stop_name AS last_stop_name,
   r.route_long_name,
+  t.trip_headsign,
   p.prev_observed_at,
   p.prev_lon,
   p.prev_lat,
@@ -21,6 +22,7 @@ SELECT
 FROM bus.vehicle_latest l
 LEFT JOIN gtfs.stops s ON l.last_stop_id = s.stop_id
 LEFT JOIN gtfs.routes r ON l.route_id = r.route_id
+LEFT JOIN gtfs.trips t ON l.trip_id = t.trip_id
 LEFT JOIN LATERAL (
   SELECT
     o.observed_at AS prev_observed_at,
@@ -42,7 +44,7 @@ def get_latest_by_route_and_direction(route_id: str | None, direction: int | Non
     filters = []
     params: dict = {}
 
-    # pedropt10: Only show buses that reported in the last 20 minutes
+    # Only show buses that reported in the last 20 minutes
     filters.append("l.observed_at > NOW() - INTERVAL '20 minutes'")
     # filters.append("l.observed_at > NOW() - INTERVAL '300 minutes'")
 

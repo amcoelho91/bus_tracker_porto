@@ -5,7 +5,7 @@ from app.config import settings
 
 router = APIRouter()
 
-@router.get("/shapes")
+@router.get("/shapes/route")
 async def get_route_shape(
     route_id: str = Query(..., examples=["704"]), 
     direction_id: int = Query(..., examples=[0, 1]),
@@ -40,6 +40,38 @@ async def get_route_shape(
                 return {
                     "coordinates": coords,
                     "color": color
+                }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+
+@router.get("/shapes/trip")
+async def get_trip_shape(
+    trip_id: str = Query(..., examples=["503_0_1|223|D3|T1|N8"])
+):
+    query = """
+        SELECT ST_AsGeoJSON(s.geom) 
+        FROM gtfs.shapes s
+        LEFT JOIN gtfs.trips t ON s.shape_id = t.shape_id
+        WHERE t.trip_id = %s
+        LIMIT 1;
+    """
+    
+    try:
+        with psycopg.connect(settings.database_url) as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, (trip_id, ))
+                row = cur.fetchone()
+                
+                if not row:
+                    return {"coordinates": []}
+                
+                geojson = json.loads(row[0])
+                # Flip [lon, lat] from PostGIS to [lat, lon] for Leaflet
+                coords = [[p[1], p[0]] for p in geojson["coordinates"]]
+                
+                return {
+                    "coordinates": coords
                 }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

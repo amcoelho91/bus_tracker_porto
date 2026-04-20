@@ -11,10 +11,12 @@ SELECT
   v.last_stop_id,
   v.cur_stop_id,
   s.stop_name AS last_stop_name,
-  r.route_long_name
+  r.route_long_name,
+  t.trip_headsign
 FROM bus.vehicle_latest v
 LEFT JOIN gtfs.stops s ON s.stop_id = v.last_stop_id
 LEFT JOIN gtfs.routes r ON r.route_id = v.route_id
+LEFT JOIN gtfs.trips t ON v.trip_id = t.trip_id
 WHERE (%(route_id)s::text IS NULL OR v.route_id = %(route_id)s::text)
 ORDER BY v.fleet_vehicle_id NULLS LAST;
 """
@@ -32,10 +34,12 @@ SELECT
   v.cur_stop_id,
   v.last_stop_id,
   s.stop_name AS last_stop_name,
-  r.route_long_name
+  r.route_long_name,
+  t.trip_headsign
 FROM bus.vehicle_latest v
 LEFT JOIN gtfs.stops s ON s.stop_id = v.last_stop_id
 LEFT JOIN gtfs.routes r ON r.route_id = v.route_id
+LEFT JOIN gtfs.trips t ON v.trip_id = t.trip_id
 WHERE v.vehicle_id = %(fleet_vehicle_id)s
 LIMIT 1;
 """

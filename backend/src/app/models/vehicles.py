@@ -15,6 +15,7 @@ class VehicleLatest(BaseModel):
     last_stop_id: str | None
     last_stop_name: str | None
     route_long_name: str | None
+    trip_headsign: str | None
 
     # previous position (may be null if no history exists)
     prev_observed_at: datetime | None = None

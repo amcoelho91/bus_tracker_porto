@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from "react";
-import { fetchAllRoutes, type AllRoutes, type VehicleLatest, type RouteShape, 
-    fetchRouteShape, fetchHistory, fetchAvailableTrips } from "../api/client";
+import React, { useState, useEffect, useMemo } from "react";
+import { fetchAllRoutes, fetchAvailableTrips, fetchHistory, fetchStops, fetchTripShape, fetchTripOrigin, fetchTripExecution,
+type AllRoutes, type VehicleLatest, type TripShape, type TripOriginResponse, type TripExecution, type Stop, } from "../api/client";
 import { HistoryMap } from "../components/HistoryMap";
+import { TripSpine } from "../components/HistorySpine";
+import { getRouteColors, getDirectionDestination } from "../components/Map";
 
 type Tab = "trip" | "route";
 
@@ -19,8 +21,12 @@ export function HistoryPage() {
   // Results
   const [historyData, setHistoryData] = useState<VehicleLatest[]>([]);
   const [availableTrips, setAvailableTrips] = useState<string[]>([]);
-  const [shape, setShape] = useState<RouteShape | null>(null);
+  const [tripOrigin, setTripOrigin] = useState<TripOriginResponse[]>([]);
+  const [tripExecution, setTripExecution] = useState<TripExecution[]>([]);
+  const [shape, setShape] = useState<TripShape | null>(null);
+  const [stops, setStops] = useState<Stop[]>([]);
   const [loading, setLoading] = useState(false);
+  const [selectedRouteColors, setRouteColors] = useState({ bgColor: 'transparent', textColor: 'inherit' });
 
   useEffect(() => {
     fetchAllRoutes().then(setAllRoutes).catch(console.error);
@@ -39,10 +45,18 @@ export function HistoryPage() {
   }, [selectedRoute, selectedDate, activeTab]);
 
   const handleSearch = async () => {
-    setHistoryData([]); // Clear the map immediately
+    if (!selectedRoute || (activeTab === "trip" && !selectedTrip)) {
+      alert(`Please select ${activeTab === "trip" ? "both a Route and a Trip" : "a Route"} before searching!`);
+      return; // Exit function early
+    }
+     // Clear the map immediately, as well as the trip origin and the execution data
+    setHistoryData([]);
+    setTripOrigin([]);
+    setTripExecution([]);
+    setStops([]);
     setLoading(true);
     try {
-      // TODO: Implement fetchHistory in your api/client.ts
+      // 1. Fetch main history data (GPS points for the map)
       const data = await fetchHistory({ 
         mode: activeTab,
         route_id: selectedRoute,
@@ -53,11 +67,41 @@ export function HistoryPage() {
       });
       setHistoryData(data);
       
-      // Also fetch shape to provide context on the map
-      if (selectedRoute) {
-        const shapeData = await fetchRouteShape(selectedRoute, 1); // Defaulting to direction 1 for now
+      // 2. Fetch Trip Shape
+      if (selectedTrip) {
+        const shapeData = await fetchTripShape(selectedTrip);
         setShape(shapeData);
+        const data = await fetchStops(selectedRoute, 0);
+        setStops(data);
+        // DIRECTION TEMPORARILY SET AS ZER O
+        // Must be modified to get the stops via the shape_id 
       }
+
+      // 3. Fetch Route Colors
+      if (selectedRoute) {
+        const selectedRouteColors = getRouteColors(selectedRoute, 0);
+          setRouteColors({
+            bgColor: selectedRouteColors.bgColor || 'transparent',
+            textColor: selectedRouteColors.textColor || '(var--text-main)'
+          });
+      }
+
+      // 4. Fetch Trip Context (Origin and Spine Execution)
+      if (selectedTrip) {
+        // Run these in parallel to save time
+        const [origin, exec] = await Promise.all([
+          fetchTripOrigin(selectedTrip),
+          fetchTripExecution(selectedTrip, selectedDate)
+        ]);
+        
+        setTripOrigin([origin]);
+        setTripExecution(exec);
+      }
+      // if (selectedTrip) {
+      //   const tripOrigin = await fetchTripOrigin(selectedTrip);
+      //   setTripOrigin([tripOrigin]);
+      // }
+
     } catch (e) {
       alert("Search failed");
     } finally {
@@ -80,10 +124,14 @@ export function HistoryPage() {
       </div>
 
       {/* Search Controls */}
-      <div style={{ padding: "15px", display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "flex-end", background: "white" }}>
+      <div style={{ padding: "15px", display: "flex", gap: "10px", flexWrap: "wrap", 
+        alignItems: "flex-end", background: "var(--bg-sub-header)", borderBottom: "1px solid var(--border-color)" }}>
         <div className="field">
           <label style={labelStyle}>Route</label>
-          <select value={selectedRoute} onChange={(e) => setSelectedRoute(e.target.value)} style={inputStyle}>
+          <select value={selectedRoute} onChange={(e) => {
+            setSelectedRoute(e.target.value); 
+            setSelectedTrip(""); // Reset the trip whenever the route changes
+          }} style={inputStyle}>
             <option value="">Select Route</option>
             {allRoutes.map(r => <option key={r.route_id} value={r.route_id}>{r.route_short_name}</option>)}
           </select>
@@ -93,7 +141,7 @@ export function HistoryPage() {
           <div className="field">
             <label style={labelStyle}>Trip ID</label>
             <select value={selectedTrip} onChange={(e) => setSelectedTrip(e.target.value)} style={inputStyle} disabled={availableTrips.length === 0}>
-                <option value="">
+                <option value="" hidden={!!selectedTrip}>
                     {availableTrips.length > 0 ? "Select a Trip" : "No trips found for this day"}
                 </option>
                 {availableTrips.map(tid => (
@@ -124,14 +172,87 @@ export function HistoryPage() {
         </button>
       </div>
 
-      {/* Map Content */}
-      <div style={{ flex: 1, position: "relative" }}>
-        <HistoryMap 
-          vehicles={historyData} 
-          shapeData={shape} 
-          selectedRoute={selectedRoute} 
-        />
+      {/* Trip Header */}
+      <div style={{ height: "75px", display: "flex", gap: "10px", flexWrap: "wrap", padding: "15px",
+        alignItems: "flex-end", background: "var(--bg-sub-header)", borderBottom: "1px solid var(--border-color)"}}>
+          {selectedRoute && (
+            <>
+              {historyData[0]?.route_short_name ? (
+                <span style={{ backgroundColor: selectedRouteColors.bgColor, color: selectedRouteColors.textColor, padding: "2px 2px", borderRadius: 10, minWidth: 80,
+                            display: "inline-block", textAlign: "center", fontSize: "32px"}}>
+                            <b>{historyData[0]?.route_short_name || " "}</b> </span> 
+                          ) : ( " " ) }
+
+              {/* Table-like Container for the Headsign and Subtext */}
+              {/* <div style={{ display: "flex", flexDirection: "column", justifyContent: "flex-end", height: "100%", margin: 0, padding: 0 }}> */}
+
+                  {/* First Row: Trip Headsign */}
+                {/* <span style={{ fontSize: "24px", lineHeight: "1", color: "var(--text-main)" }}>
+                  <b>→&nbsp;{historyData[0]?.trip_headsign || " "}</b>
+                </span> */}
+
+                {/* Second Row: Placeholder Text */}
+                {/* <span style={{ fontSize: "12px", color: "var(--text-secondary)", lineHeight: "1.2" }}>
+                  Origin: {tripOrigin[0]?.origin_stop_name}
+                </span> */}
+
+              {/* </div> */}
+              <span style={{ textAlign: "center", fontSize: "24px", paddingBottom: "8px" }}>
+                {(historyData[0]?.trip_headsign && tripOrigin[0]?.origin_stop_name) ? (
+                  <>
+                    {tripOrigin[0]?.origin_stop_name}
+                    <b>&nbsp;→&nbsp;{historyData[0]?.trip_headsign}</b>
+                  </>
+                ) : ( " " )} </span>
+            </>
+            )}
       </div>
+
+      {/* Main Content Area: Side-by-Side Wrapper */}
+      <div style={{ 
+        display: "flex", 
+        flexDirection: "row", // Horizontal layout
+        flex: 1, 
+        width: "100%", 
+        overflow: "hidden", // Keeps the scroll within the children
+        background: "var(--bg-main)"
+      }}>
+
+        {/* Left Column: Trip Spine */}
+        {tripExecution.length > 0 && (
+          <div style={{ 
+            flex: "2",             // Takes 1 share of space
+            minWidth: "320px",     // Prevents it from getting too squished
+            maxWidth: "450px",     // Prevents it from getting too wide on huge monitors
+            borderRight: "1px solid var(--border-color)", 
+            overflowY: "auto",      // Only the spine scrolls
+            background: "var(--bg-nav)"
+          }}>
+            <TripSpine 
+              execution={tripExecution} 
+              routeColors={selectedRouteColors} 
+            />
+          </div>
+        )}
+
+        {/* Right Column: Map Content */}
+        <div style={{ 
+          flex: "5",               // Takes 3 shares (Map will be ~75% width)
+          position: "relative",
+          height: "100%"
+        }}>
+          <HistoryMap 
+            vehicles={historyData} 
+            shapeData={shape} 
+            selectedRoute={selectedRoute} 
+            stops={stops}
+          />
+        </div>
+
+      </div>
+
+      <div style={{ minHeight: "60px"}}>&nbsp;</div>
+
     </div>
   );
 }

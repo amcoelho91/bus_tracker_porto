@@ -69,50 +69,61 @@ def main():
                         cur.execute(
                             """
                             WITH shape_lookup AS (
-                                SELECT shape_id, geom as shape_geom,
-                                    ST_Length(geom::geography) as total_len 
-                                FROM gtfs.shapes 
-                                WHERE route_id = %s AND direction_id = %s 
+                                SELECT t.shape_id, s.geom as shape_geom,
+                                    ST_Length(s.geom::geography) as total_len 
+                                FROM gtfs.trips t
+                                JOIN gtfs.shapes s on t.shape_id = s.shape_id
+                                WHERE t.trip_id = %s 
                                 LIMIT 1
                             ),
                             bus_geo AS (
                                 -- Define the bus point once to reuse
-                                SELECT ST_SetSRID(ST_MakePoint(%s, %s), 4326) as geom
+                                SELECT ST_SetSRID(ST_MakePoint(%s, %s), 4326) as bus_geom
                             ),
                             bus_stats AS (
-                                -- Calculate how far the bus is ALONG the shape
                                 SELECT 
+                                    %s::timestamp as observed_at,
+                                    bg.bus_geom,
                                     sl.shape_id,
-                                    ST_LineLocatePoint(sl.shape_geom, bg.geom) * sl.total_len as bus_dist_m,
-                                    ST_Distance(bg.geom::geography, sl.shape_geom::geography) as dist_to_shape
+                                    sl.shape_geom,
+                                    ST_Distance(bg.bus_geom::geography, sl.shape_geom::geography) as dist_to_shape,
+                                    ST_LineLocatePoint(sl.shape_geom, bg.bus_geom) as bus_fraction
                                 FROM shape_lookup sl, bus_geo bg
                             ),
-                            matched_last_stop AS (
-                                SELECT ss.stop_id 
-                                FROM gtfs.shape_stops ss
-                                JOIN bus_stats bs ON ss.shape_id = bs.shape_id
-                                WHERE 
-                                    -- 1. Bus must be near the actual route
-                                    bs.dist_to_shape < 150 
-                                    -- 2. Use the pre-calculated meters to ensure we are 'behind' the bus
-                                    -- This handles circular routes (in theory)
-                                    AND ss.shape_dist_traveled <= (bs.bus_dist_m + 10) 
-                                ORDER BY ss.stop_sequence DESC
-                                LIMIT 1
-                            ),
                             matched_current_stop AS (
-                                -- Rule: Within 50m of shape, and within 25m physical distance of stop
-                                SELECT ss.stop_id
-                                FROM gtfs.shape_stops ss
-                                JOIN bus_stats bs ON ss.shape_id = bs.shape_id
+                                -- Logic: Proximity-based match with a route-snapping guard
+                                SELECT DISTINCT ON (bs.observed_at)
+                                    bs.observed_at,
+                                    ss.stop_id,
+                                    ss.stop_sequence,
+                                    ST_Distance(
+                                        bs.bus_geom::geography, 
+                                        ST_SetSRID(ST_MakePoint(s.stop_lon, s.stop_lat), 4326)::geography
+                                    ) as stop_dist
+                                FROM bus_stats bs
+                                JOIN gtfs.shape_stops ss ON ss.shape_id = bs.shape_id
                                 JOIN gtfs.stops s ON ss.stop_id = s.stop_id
-                                JOIN bus_geo bg ON TRUE
+                                WHERE bs.dist_to_shape < 50  
+                                AND ST_Distance(
+                                        bs.bus_geom::geography, 
+                                        ST_SetSRID(ST_MakePoint(s.stop_lon, s.stop_lat), 4326)::geography
+                                    ) < 50 
+                                ORDER BY bs.observed_at, stop_dist ASC
+                            ),
+                            matched_last_stop AS (
+                                -- Logic: Find highest sequence stop where stop_location_fraction <= bus_location_fraction
+                                SELECT DISTINCT ON (bs.observed_at)
+                                    bs.observed_at,
+                                    ss.stop_id
+                                FROM bus_stats bs
+                                JOIN gtfs.shape_stops ss ON ss.shape_id = bs.shape_id
+                                JOIN gtfs.stops s ON ss.stop_id = s.stop_id
                                 WHERE 
-                                    bs.dist_to_shape < 50 -- Stricter off-route check for 'current' stop
-                                    AND ABS(ss.shape_dist_traveled - bs.bus_dist_m) < 50 -- Path proximity
-                                    AND ST_Distance(bg.geom::geography, ST_SetSRID(ST_MakePoint(s.stop_lon, s.stop_lat), 4326)::geography) < 25 -- Physical proximity
-                                ORDER BY ST_Distance(bg.geom::geography, ST_SetSRID(ST_MakePoint(s.stop_lon, s.stop_lat), 4326)::geography) ASC
-                                LIMIT 1
+                                    -- Compare the stop's position on the line to the bus's position on the line
+                                    ST_LineLocatePoint(bs.shape_geom, ST_SetSRID(ST_MakePoint(s.stop_lon, s.stop_lat), 4326)) 
+                                    <= (bs.bus_fraction + 0.0005) -- Tiny buffer to account for GPS/Shape snapping jitter
+                                    AND bs.dist_to_shape < 150
+                                ORDER BY bs.observed_at, ss.stop_sequence DESC
                             ),
                             -- 1. Insert into history and RETURNING the values we need
                             inserted_observation AS (
@@ -121,7 +132,7 @@ def main():
                                     heading, current_trip_count, geom, last_stop_id, cur_stop_id
                                 )
                                 SELECT 
-                                    %s, %s, %s, %s, %s, %s, %s, bg.geom,
+                                    %s, %s, %s, %s, %s, %s, %s, bg.bus_geom,
                                     -- If current stop exists, it is also the last stop passed.
                                     COALESCE(
                                             (SELECT stop_id FROM matched_current_stop), 
@@ -133,7 +144,7 @@ def main():
                                 RETURNING *
                             )
                             -- 2. Upsert the latest table using the data from the insertion above
-                            INSERT INTO bus.vehicle_latest AS v (
+                            INSERT INTO bus.vehicle_latest (
                                 vehicle_id, observed_at, route_id, direction, trip_id,
                                 heading, geom, updated_at, last_stop_id, cur_stop_id
                             )
@@ -144,7 +155,7 @@ def main():
                             ON CONFLICT (vehicle_id) DO UPDATE
                             SET 
                                 observed_at = EXCLUDED.observed_at,
-                                vehicle_id = EXCLUDED.vehicle_id,
+                                -- vehicle_id = EXCLUDED.vehicle_id,
                                 route_id = EXCLUDED.route_id,
                                 direction = EXCLUDED.direction,
                                 trip_id = EXCLUDED.trip_id,
@@ -153,15 +164,115 @@ def main():
                                 updated_at = now(),
                                 last_stop_id = EXCLUDED.last_stop_id,
                                 cur_stop_id = EXCLUDED.cur_stop_id
-                            WHERE EXCLUDED.observed_at > v.observed_at
+                            WHERE EXCLUDED.observed_at > vehicle_latest.observed_at
                             """,
                             (
-                                route_id, direction, # for shape lookup
+                                trip_id,             # for shape lookup
                                 lon, lat,            # for bus_geo (distance calculations)
+                                observed_at,         # for matched_current_stop
                                 vehicle_id, observed_at, route_id, direction, trip_id,
                                 heading, current_trip_count, # for inserted_observation
                                 vehicle_id  # for vehicle_latest upsert (not from inserted_observation)
                             ),
+
+                            
+                        # # # Insert history (dedupe if unique index exists)
+                        # cur.execute(
+                        #     """
+                        #     WITH shape_lookup AS (
+                        #         SELECT shape_id, geom as shape_geom,
+                        #             ST_Length(geom::geography) as total_len 
+                        #         FROM gtfs.shapes 
+                        #         WHERE route_id = %s AND direction_id = %s 
+                        #         LIMIT 1
+                        #     ),
+                        #     bus_geo AS (
+                        #         -- Define the bus point once to reuse
+                        #         SELECT ST_SetSRID(ST_MakePoint(%s, %s), 4326) as geom
+                        #     ),
+                        #     bus_stats AS (
+                        #         -- Calculate how far the bus is ALONG the shape
+                        #         SELECT 
+                        #             sl.shape_id,
+                        #             ST_LineLocatePoint(sl.shape_geom, bg.geom) * sl.total_len as bus_dist_m,
+                        #             ST_Distance(bg.geom::geography, sl.shape_geom::geography) as dist_to_shape
+                        #         FROM shape_lookup sl, bus_geo bg
+                        #     ),
+                        #     matched_last_stop AS (
+                        #         SELECT ss.stop_id 
+                        #         FROM gtfs.shape_stops ss
+                        #         JOIN bus_stats bs ON ss.shape_id = bs.shape_id
+                        #         WHERE 
+                        #             -- 1. Bus must be near the actual route
+                        #             bs.dist_to_shape < 150 
+                        #             -- 2. Use the pre-calculated meters to ensure we are 'behind' the bus
+                        #             -- This handles circular routes (in theory)
+                        #             AND ss.shape_dist_traveled <= (bs.bus_dist_m + 10) 
+                        #         ORDER BY ss.stop_sequence DESC
+                        #         LIMIT 1
+                        #     ),
+                        #     matched_current_stop AS (
+                        #         -- Rule: Within 50m of shape, and within 50m physical distance of stop
+                        #         SELECT ss.stop_id
+                        #         FROM gtfs.shape_stops ss
+                        #         JOIN bus_stats bs ON ss.shape_id = bs.shape_id
+                        #         JOIN gtfs.stops s ON ss.stop_id = s.stop_id
+                        #         JOIN bus_geo bg ON TRUE
+                        #         WHERE 
+                        #             bs.dist_to_shape < 50 -- Stricter off-route check for 'current' stop
+                        #             AND ABS(ss.shape_dist_traveled - bs.bus_dist_m) < 50 -- Path proximity
+                        #             AND ST_Distance(bg.geom::geography, ST_SetSRID(ST_MakePoint(s.stop_lon, s.stop_lat), 4326)::geography) < 50 -- Physical proximity
+                        #         ORDER BY ST_Distance(bg.geom::geography, ST_SetSRID(ST_MakePoint(s.stop_lon, s.stop_lat), 4326)::geography) ASC
+                        #         LIMIT 1
+                        #     ),
+                        #     -- 1. Insert into history and RETURNING the values we need
+                        #     inserted_observation AS (
+                        #         INSERT INTO bus.vehicle_observation (
+                        #             vehicle_id, observed_at, route_id, direction, trip_id,
+                        #             heading, current_trip_count, geom, last_stop_id, cur_stop_id
+                        #         )
+                        #         SELECT 
+                        #             %s, %s, %s, %s, %s, %s, %s, bg.geom,
+                        #             -- If current stop exists, it is also the last stop passed.
+                        #             COALESCE(
+                        #                     (SELECT stop_id FROM matched_current_stop), 
+                        #                     (SELECT stop_id FROM matched_last_stop)
+                        #                 ),
+                        #                 (SELECT stop_id FROM matched_current_stop)
+                        #         FROM bus_geo bg
+                        #         ON CONFLICT DO NOTHING
+                        #         RETURNING *
+                        #     )
+                        #     -- 2. Upsert the latest table using the data from the insertion above
+                        #     INSERT INTO bus.vehicle_latest AS v (
+                        #         vehicle_id, observed_at, route_id, direction, trip_id,
+                        #         heading, geom, updated_at, last_stop_id, cur_stop_id
+                        #     )
+                        #     SELECT 
+                        #         %s, io.observed_at, io.route_id, io.direction, io.trip_id,
+                        #         io.heading, io.geom, now(), io.last_stop_id, io.cur_stop_id
+                        #     FROM inserted_observation io
+                        #     ON CONFLICT (vehicle_id) DO UPDATE
+                        #     SET 
+                        #         observed_at = EXCLUDED.observed_at,
+                        #         vehicle_id = EXCLUDED.vehicle_id,
+                        #         route_id = EXCLUDED.route_id,
+                        #         direction = EXCLUDED.direction,
+                        #         trip_id = EXCLUDED.trip_id,
+                        #         heading = EXCLUDED.heading,
+                        #         geom = EXCLUDED.geom,
+                        #         updated_at = now(),
+                        #         last_stop_id = EXCLUDED.last_stop_id,
+                        #         cur_stop_id = EXCLUDED.cur_stop_id
+                        #     WHERE EXCLUDED.observed_at > v.observed_at
+                        #     """,
+                        #     (
+                        #         route_id, direction, # for shape lookup
+                        #         lon, lat,            # for bus_geo (distance calculations)
+                        #         vehicle_id, observed_at, route_id, direction, trip_id,
+                        #         heading, current_trip_count, # for inserted_observation
+                        #         vehicle_id  # for vehicle_latest upsert (not from inserted_observation)
+                        #     ),
                         )
 
                         inserted_obs += cur.rowcount  # 1 or 0

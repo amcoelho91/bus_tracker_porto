@@ -1,0 +1,2 @@
+agency_id,agency_name,agency_url,agency_timezone,agency_phone,agency_lang
+STCP,"Sociedade de Transportes Colectivos do Porto, E.I.M., S.A",http://www.stcp.pt,Europe/Lisbon,225071000,pt

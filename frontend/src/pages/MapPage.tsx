@@ -152,7 +152,8 @@ export function MapPage() {
         {error && <span style={{ marginLeft: 10, color: "crimson" }}>{error}</span>}
       </div>
       <div style={{ flex: 1, position: "relative" }}>
-        <Map vehicles={vehicles} shapeData0={shapeData0} shapeData1={shapeData1} stops={stops} selectedRoute={route} selectedDirection={direction} />
+        <Map vehicles={vehicles} shapeData0={shapeData0} shapeData1={shapeData1} stops={stops} 
+        selectedRoute={route} selectedDirection={direction} />
       </div>
     </div>
   );
