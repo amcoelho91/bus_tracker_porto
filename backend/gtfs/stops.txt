@@ -31,7 +31,6 @@ stop_lat,stop_lon,stop_id,stop_code,stop_name,zone_id,stop_url
 41.193808,-8.696874,1ILEC2,1ILEC2,Igreja De Leça,MTS2,http://www.stcp.pt/pt/viajar/paragens/?t=detalhe&paragem=1ILEC2
 41.124321,-8.618902,1JFT1,1JFT1,José Fontana,VNG1,http://www.stcp.pt/pt/viajar/paragens/?t=detalhe&paragem=1JFT1
 41.145883,-8.612838,1LOI3,1LOI3,Lóios,PRT1,http://www.stcp.pt/pt/viajar/paragens/?t=detalhe&paragem=1LOI3
-41.154309,-8.647614,1LRD1,1LRD1,Lordelo,PRT2,http://www.stcp.pt/pt/viajar/paragens/?t=detalhe&paragem=1LRD1
 41.212505,-8.675936,1MAVO1,1MAVO1,Monte Avó,MTS2,http://www.stcp.pt/pt/viajar/paragens/?t=detalhe&paragem=1MAVO1
 41.212618,-8.676052,1MAVO2,1MAVO2,Monte Avó,MTS2,http://www.stcp.pt/pt/viajar/paragens/?t=detalhe&paragem=1MAVO2
 41.130435,-8.630094,1MST1,1MST1,Machado Dos Santos,VNG1,http://www.stcp.pt/pt/viajar/paragens/?t=detalhe&paragem=1MST1
@@ -1299,6 +1298,8 @@ stop_lat,stop_lon,stop_id,stop_code,stop_name,zone_id,stop_url
 41.225331,-8.688035,JQA2,JQA2,Joaquim Andrade,MTS2,http://www.stcp.pt/pt/viajar/paragens/?t=detalhe&paragem=JQA2
 41.101754,-8.619010,JQBX1,JQBX1,Junqueira De Baixo,VNG4,http://www.stcp.pt/pt/viajar/paragens/?t=detalhe&paragem=JQBX1
 41.101941,-8.618956,JQBX2,JQBX2,Junqueira De Baixo,VNG4,http://www.stcp.pt/pt/viajar/paragens/?t=detalhe&paragem=JQBX2
+41.155722,-8.659889,JRC1,JRC1,João R. Cabrilho,PRT2,http://www.stcp.pt/pt/viajar/paragens/?t=detalhe&paragem=JRC1
+41.155306,-8.660722,JRC3,JRC3,João R.cabrilho,PRT2,http://www.stcp.pt/pt/viajar/paragens/?t=detalhe&paragem=JRC3
 41.106329,-8.644114,JSP,JSP,José Poças,VNG4,http://www.stcp.pt/pt/viajar/paragens/?t=detalhe&paragem=JSP
 41.104660,-8.642982,JSP2,JSP2,José Poças,VNG4,http://www.stcp.pt/pt/viajar/paragens/?t=detalhe&paragem=JSP2
 41.233692,-8.629578,JZOO1,JZOO1,Jardim Zoológico,MAI1,http://www.stcp.pt/pt/viajar/paragens/?t=detalhe&paragem=JZOO1
@@ -1529,7 +1530,7 @@ stop_lat,stop_lon,stop_id,stop_code,stop_name,zone_id,stop_url
 41.160712,-8.606003,MPL11,MPL11,Marquês,PRT1,http://www.stcp.pt/pt/viajar/paragens/?t=detalhe&paragem=MPL11
 41.160802,-8.604137,MPL2,MPL2,Marquês,PRT1,http://www.stcp.pt/pt/viajar/paragens/?t=detalhe&paragem=MPL2
 41.161358,-8.604809,MPL4,MPL4,Marquês,PRT1,http://www.stcp.pt/pt/viajar/paragens/?t=detalhe&paragem=MPL4
-41.161779,-8.603144,MPL7,MPL7,Marquês,PRT1,http://www.stcp.pt/pt/viajar/paragens/?t=detalhe&paragem=MPL7
+41.161960,-8.604700,MPL7,MPL7,Marquês,PRT1,http://www.stcp.pt/pt/viajar/paragens/?t=detalhe&paragem=MPL7
 41.161487,-8.604733,MPL9,MPL9,Marquês,PRT1,http://www.stcp.pt/pt/viajar/paragens/?t=detalhe&paragem=MPL9
 41.228611,-8.580001,MPN1,MPN1,Monte Penedo,MAI4,http://www.stcp.pt/pt/viajar/paragens/?t=detalhe&paragem=MPN1
 41.228639,-8.580167,MPN2,MPN2,Monte Penedo,MAI4,http://www.stcp.pt/pt/viajar/paragens/?t=detalhe&paragem=MPN2

@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS bus.vehicle_observation (
 
 -- Real-time serving layer: one row per vehicle (upserted)
 CREATE TABLE IF NOT EXISTS bus.vehicle_latest (
-  vehicle_id           text PRIMARY KEY REFERENCES bus.vehicle(vehicle_id) ON DELETE CASCADE,
+  vehicle_id           text PRIMARY KEY,
   observed_at          timestamptz NOT NULL,
 
   route_id             text,
@@ -82,7 +82,9 @@ CREATE TABLE IF NOT EXISTS gtfs.shapes (
     shape_id TEXT PRIMARY KEY,
     route_id TEXT,
     direction_id INTEGER,
-    geom geometry(LineString, 4326)
+    variant_id INTEGER,
+    geom geometry(LineString, 4326),
+    shape_dist_traveled DOUBLE PRECISION
 );
 
 CREATE TABLE IF NOT EXISTS gtfs.stops (
@@ -96,11 +98,13 @@ CREATE TABLE IF NOT EXISTS gtfs.stops (
 
 CREATE TABLE IF NOT EXISTS gtfs.trips (
     trip_id TEXT PRIMARY KEY,
-    route_id TEXT NOT NULL,
+    route_id TEXT REFERENCES gtfs.routes(route_id),
     direction_id INTEGER,
-    service_id TEXT NOT NULL,
+    service_id TEXT,
     trip_headsign TEXT,
-    shape_id TEXT
+    shape_id TEXT REFERENCES gtfs.shapes(shape_id),
+    shift_nr INTEGER, -- comes from T in trip_id
+    trip_nr_in_shift INTEGER  -- comes from N in trip_id
 );
 
 CREATE TABLE IF NOT EXISTS gtfs.stop_times (
@@ -109,6 +113,8 @@ CREATE TABLE IF NOT EXISTS gtfs.stop_times (
     departure_time TEXT,
     stop_id TEXT REFERENCES gtfs.stops(stop_id) ON DELETE CASCADE,
     stop_sequence INTEGER NOT NULL,
+    shape_dist_traveled DOUBLE PRECISION,
+    timepoint BOOLEAN,
     PRIMARY KEY (trip_id, stop_sequence)
 );
 
@@ -141,9 +147,5 @@ CREATE TABLE IF NOT EXISTS gtfs.calendar_dates (
     exception_type INTEGER,
     PRIMARY KEY (service_id, date)
 );
-
--- Create indexes for performance during lookups
-CREATE INDEX IF NOT EXISTS idx_trips_route_id ON gtfs.trips(route_id);
-CREATE INDEX IF NOT EXISTS idx_stoptimes_stop_id ON gtfs.stop_times(stop_id);
 
 COMMIT;

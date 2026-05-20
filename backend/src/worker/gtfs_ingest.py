@@ -501,31 +501,60 @@ def associate_stops_to_shapes():
     with psycopg.connect(DATABASE_URL) as conn:
         with conn.cursor() as cur:
             # 1. Clear the table to ensure we don't keep partial route data
-            cur.execute("TRUNCATE gtfs.shape_stops;")
+            # cur.execute("TRUNCATE gtfs.shape_stops;")
 
             # for every unique shape_id in trips, using one trip_id (that uses the shape_id),
             # find the stops in stop_times, insert into shape_stops
             # (with the shape_id from trips and the stop_sequence and shape_dist_traveled from stop_times)
 
+            print("Increasing work_mem to 64MB and maintenance_work_mem to 256 MB.")
+            cur.execute("SET work_mem = '64MB';")
+            cur.execute("SET maintenance_work_mem = '256MB';")
+
             cur.execute("""
                 INSERT INTO gtfs.shape_stops (shape_id, stop_id, stop_sequence, shape_dist_traveled)
-                SELECT DISTINCT ON (t.shape_id, st.stop_sequence)
-                    t.shape_id,
+                WITH representative_trips AS (
+                    SELECT DISTINCT ON (shape_id) 
+                        shape_id, 
+                        trip_id
+                    FROM gtfs.trips
+                    WHERE shape_id IS NOT NULL
+                )
+                -- Step 2: Grab stops ONLY for those specific representative trips
+                SELECT 
+                    rt.shape_id,
                     st.stop_id,
                     st.stop_sequence,
                     st.shape_dist_traveled
-                FROM gtfs.trips t
-                JOIN gtfs.stop_times st ON t.trip_id = st.trip_id
-                WHERE t.shape_id IS NOT NULL
-                ORDER BY t.shape_id, st.stop_sequence, t.trip_id
-                ON CONFLICT DO NOTHING;
+                FROM representative_trips rt
+                JOIN gtfs.stop_times st ON rt.trip_id = st.trip_id;
             """)
 
+            print("Completed part 1 of shape_stops ingestion.")
+
+            # cur.execute("""
+            #     INSERT INTO gtfs.shape_stops (shape_id, stop_id, stop_sequence, shape_dist_traveled)
+            #     SELECT DISTINCT ON (t.shape_id, st.stop_sequence)
+            #         t.shape_id,
+            #         st.stop_id,
+            #         st.stop_sequence,
+            #         st.shape_dist_traveled
+            #     FROM gtfs.trips t
+            #     JOIN gtfs.stop_times st ON t.trip_id = st.trip_id
+            #     WHERE t.shape_id IS NOT NULL
+            #     ORDER BY t.shape_id, st.stop_sequence, t.trip_id
+            #     ON CONFLICT DO NOTHING;
+            # """)
+
             # if shape_dist_traveled is missing, calculate it now based on the geometries and stop locations
-            if not get_shapes_without_shape_dist_traveled(cur):
+            shapes_without_dist_traveled = get_shapes_without_shape_dist_traveled(cur)
+            if shapes_without_dist_traveled:
                 calculate_cumulative_shape_distances(cur)
             
+            print("Completed part 2 of shape_stops ingestion.")
+
             conn.commit()
+
     print("Shape-to-stop associations built successfully.")
 
 def haversine_distance(lat1, lon1, lat2, lon2):

@@ -33,4 +33,25 @@ CREATE INDEX IF NOT EXISTS ix_latest_geom
 CREATE UNIQUE INDEX IF NOT EXISTS ux_obs_vehicle_observed_at
   ON bus.vehicle_observation (vehicle_id, observed_at);
 
+
+-- spatial index for faster geospatial queries
+CREATE INDEX IF NOT EXISTS idx_gtfs_shapes_geom ON gtfs.shapes USING GIST(geom);
+
+CREATE INDEX IF NOT EXISTS idx_gtfs_shapes_route_dir ON gtfs.shapes(route_id, direction_id);
+
+CREATE INDEX IF NOT EXISTS idx_trips_route_id ON gtfs.trips(route_id);
+
+CREATE INDEX IF NOT EXISTS idx_gtfs_trips_route_direction_service 
+    ON gtfs.trips (route_id, direction_id, service_id);
+
+CREATE INDEX IF NOT EXISTS idx_gtfs_stop_times_stop_id 
+        ON gtfs.stop_times(stop_id);
+
+CREATE INDEX IF NOT EXISTS idx_gtfs_stop_times_trip_id 
+    ON gtfs.stop_times(trip_id);
+        
+CREATE INDEX IF NOT EXISTS idx_stop_times_timepoints_only 
+        ON gtfs.stop_times (trip_id, stop_sequence) 
+        WHERE timepoint = TRUE;
+
 COMMIT;
